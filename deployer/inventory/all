@@ -1,0 +1,11 @@
+[all]
+controller1
+caph1
+compute2
+[controller]
+controller1
+[compute]
+controller1
+compute2
+[new_node]
+compute2

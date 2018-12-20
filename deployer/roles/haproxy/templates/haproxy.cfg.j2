@@ -1,0 +1,64 @@
+global
+    log 127.0.0.1 local3
+    chroot  /var/lib/haproxy
+    daemon
+    group  haproxy
+    maxconn  8192
+    pidfile  /var/run/haproxy.pid
+    user  haproxy
+    ssl-server-verify none
+    stats socket /var/lib/haproxy/stats
+
+#---------------------------------------------------------------------
+# common defaults that all the 'listen' and 'backend' sections will
+# use if not designated in their block
+#---------------------------------------------------------------------
+defaults
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    timeout http-keep-alive 10s
+    log  global
+    maxconn  4000
+    option  redispatch
+    retries  3
+    timeout  http-request 10s
+    timeout  queue 1m
+    timeout  connect 10s
+    timeout  client 1m
+    timeout  server 1m
+    timeout  check 10s
+
+listen dashboard_cluster
+    bind {{ controller_vhostname }}:8100 ssl crt /etc/ssl/certs/my.pem
+    balance  source
+    mode    http
+    option http-server-close
+    option forwardfor
+    stick-table type ip size 200k expire 30m
+    stick on src
+    reqadd X-Forwarded-Proto:\ https
+    capture request header Host len 255
+    capture request header User-Agent len 255
+    capture request header Referer len 255
+    capture request header Cookie len 255
+    timeout http-request 50s
+    timeout http-keep-alive 55s
+    timeout client 3h
+    timeout server 3h
+{% for i in controllers %}
+    server {{ i['hostname'] }} {{ i['hostname'] }}:8100 ssl cookie web1 weight 10 check inter 2000 rise 2 fall 5
+{% endfor %}
+
+listen admin_stats
+        stats   enable
+        bind    {{ vip }}:9000
+        mode    http
+        option  httplog
+        log     global
+        maxconn 10
+        stats   refresh 30s
+        stats   uri /admin
+        stats   realm haproxy
+        stats   auth haproxy:haproxy
+        stats   hide-version
+        stats   admin if TRUE

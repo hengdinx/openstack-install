@@ -1,0 +1,274 @@
+---
+# tasks file for zabbix
+
+- name: cleanup rpms
+  yum: name={{ item }} state=absent
+  with_items:
+    - zabbix22-dbfiles-mysql
+    - zabbix22-server
+    - zabbix22-web
+    - zabbix22-agent
+    - mp-utils
+
+- name: cleanup config directories
+  file: path={{ item }} state=absent
+  with_items:
+    - /etc/zabbix_agentd.conf.d
+    - /var/lib/zabbix
+
+- name: install zabbix-dbfiles-mysql rpms via yum
+  yum: name=zabbix22-dbfiles-mysql state=latest
+
+- block:
+  
+  - name: cleanup zabbix database
+    mysql_db:
+      login_host: "{{ vip }}"
+      login_user: root
+      login_password: "{{ mysql_root_password }}"
+      name: zabbix
+      state: absent
+  
+  - name: create zabbix database
+    mysql_db:
+      login_host: "{{ vip }}"
+      login_user: root
+      login_password: "{{ mysql_root_password }}"
+      name: zabbix
+      state: present
+  
+  - name: copy sql files to remote
+    copy: src={{ item }} dest=/usr/share/zabbix-mysql/
+    with_items:
+      - data.sql
+      - add_user.sql
+      - del_user.sql
+      - zabbix.sql
+  
+  - name: delete zabbix db user
+    mysql_user: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=zabbixsrv state=absent
+
+  - name: import sql files
+    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=zabbix state=import target={{ item }}
+    with_items:
+      - /usr/share/zabbix-mysql/schema.sql
+      - /usr/share/zabbix-mysql/images.sql
+      - /usr/share/zabbix-mysql/data.sql
+      - /usr/share/zabbix-mysql/zabbix.sql
+
+  - name: create zabbix user
+    mysql_user:
+      login_host: "{{ vip }}"
+      login_password: "{{ mysql_root_password }}"
+      login_user: root
+      name: "{{ mysql_zabbix_user }}"
+      host: "{{ item }}"
+      priv: "zabbix.*:ALL,GRANT"
+      password: "{{ mysql_zabbix_password }}"
+    with_items:
+      - "%"
+      - 127.0.0.1
+      - ::1
+      - "localhost"
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: install zabbix rpms
+  yum: name={{ item }} state=latest
+  with_items:
+    - zabbix22-server
+    - zabbix22-web
+    - zabbix22-agent
+    - mp-utils
+
+- name: render /etc/php.ini
+  ini_file:
+    path: /etc/php.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: PHP, option: max_execution_time, value: 300 }
+    - { section: PHP, option: post_max_size, value: 16M }
+    - { section: PHP, option: max_input_time, value: 300 }
+    - { section: Date, option: date.timezone, value: PRC }
+
+- name: render /etc/zabbix_server.conf
+  ini_file:
+    path: /etc/zabbix_server.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: null, option: DBHost, value: localhost }
+    - { section: null, option: DBName, value: zabbix }
+    - { section: null, option: DBUser, value: root }
+    - { section: null, option: DBPassword, value: "{{ mysql_root_password }}" }
+    - { section: null, option: CacheSize, value: 1G }
+
+- name: modify /usr/share/zabbix/include/locales.inc.php
+  lineinfile:
+    path: /usr/share/zabbix/include/locales.inc.php
+    regexp: "^[\t ]*'zh_CN' => array"
+    line: "\t\t'zh_CN' => array('name' => _('Chinese (zh_CN)'),        'display' => true),"
+    backrefs: yes
+
+- name: copy files to remote
+  copy: src={{ item.src }} dest={{ item.dest }}
+  with_items:
+    - { src: simkai.ttf, dest: /usr/share/fonts/dejavu/DejaVuSans.ttf }
+    - { src: zabbix.conf.php, dest: /etc/zabbix/web/ }
+
+- name: add iptable rules for zabbix
+  blockinfile:
+    path: /etc/sysconfig/iptables
+    insertbefore: "^COMMIT"
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR ZABBIX"
+    block: |
+      -I INPUT -p tcp -m tcp --dport 10051 -j ACCEPT
+      -I INPUT -p tcp -m tcp --sport 10051 -j ACCEPT
+      -I INPUT -p tcp -m tcp --dport 10050 -j ACCEPT
+      -I INPUT -p tcp -m tcp --sport 10050 -j ACCEPT
+
+- name: restart iptables
+  service: name=iptables state=restarted enabled=yes
+
+#- name: restart zabbix services
+#  service: name=zabbix-server-mysql state=started enabled=yes
+
+- name: add read/write privileges for all users for /var/lib/zabbixsrv and /var/spool/cron
+  file: path={{ item }} mode=0777
+  with_items:
+    - /var/lib/zabbixsrv
+    - /var/spool/cron
+
+- block:
+  - name: restart keystone
+    shell: pcs resource restart httpd-clone
+    when: ha_enabled
+ 
+  - name: wait until httpd-clone start
+    shell: 'pcs status|grep -A 1 httpd-clone'
+    register: httpd_status
+    retries: 5
+    delay: 10
+    until: '"Started" in httpd_status.stdout'
+    when: ha_enabled
+
+  - name: restart httpd service
+    service: name=httpd state=restarted
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: render /etc/zabbix_agentd.conf
+  ini_file:
+    path: /etc/zabbix_agentd.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: null, option: Server, value: "127.0.0.1,{% for i in controllers %}{{ i['cluster_ip'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: null, option: ServerActive, value: "{% for i in controllers %}{{i['cluster_ip']}}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: null, option: HostnameItem, value: system.hostname }
+    - { section: null, option: HostMetadata, value: control }
+    - { section: null, option: UnsafeUserParameters, value: 1 }
+    - { section: null, option: Include, value: /etc/zabbix_agentd.conf.d }
+    - { section: null, option: Timeout, value: 30 }
+    - { section: null, option: ListenIP, value: "{{ cluster_ip }},127.0.0.1" }
+
+- name: comment hostname line in /etc/zabbix_agentd.conf
+  ini_file:
+    path: /etc/zabbix_agentd.conf
+    section: null
+    option: Hostname
+    state: absent
+
+- name: cleanup /etc/sudoers configs
+  lineinfile:
+    path: /etc/sudoers
+    regexp: "{{ item }}"
+    state: absent
+  with_items:
+    - "^Default.*requiretty"
+    - "^zabbix ALL=NOPASSWD:"
+    - "^apache ALL=NOPASSWD:"
+
+- name: add config to /etc/sudoer
+  lineinfile:
+    path: /etc/sudoers
+    line: "{{ item }}"
+  with_items:
+    - "zabbix ALL=NOPASSWD:/usr/bin/touch,/sbin/shutdown,/usr/bin/ipmitool,/usr/sbin/vgs,/usr/bin/systemctl,/usr/bin/qemu-img,/usr/bin/xargs,/usr/bin/awk,/usr/bin/virsh,/usr/bin/rm,/usr/bin/chown,/usr/bin/chmod,/usr/bin/sed,/usr/bin/echo,/usr/sbin/pcs"
+    - "apache ALL=NOPASSWD:ALL"
+
+- name: create /etc/zabbix_agentd.conf.d
+  file: path=/etc/zabbix_agentd.conf.d state=directory
+
+- name: modify zabbix-agent.service
+  ini_file:
+    path: /usr/lib/systemd/system/zabbix-agent.service
+    section: Service
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items:
+    - { option: Restart, value: always }
+    - { option: RestartSec, value: 20s }
+
+- name: daemon-reload
+  systemd:
+    name: zabbix-agent.service
+    daemon_reload: yes
+    state: restarted
+    enabled: yes
+
+- block:
+
+  - include: zabbix_pcs_restart.yml
+    when: ha_enabled == True
+
+  - include: zabbix_service_restart.yml
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: start zabbix-agent
+  service: name=zabbix-agent.service state=restarted enabled=yes
+- block:
+  - name: wait until web service available
+    get_url:
+      url: http://localhost/zabbix/api_jsonrpc.php
+      dest: /tmp/url.txt
+    register: zabbix_available
+    until: zabbix_available.status_code == 412
+    retries: 10
+    delay: 10
+    failed_when: zabbix_available.status_code != 412 and zabbix_available.status_code != 404
+  
+  - name: render /var/lib/zabbix/host_delete.py 
+    template: src={{ item.src }} dest={{ item.dest }} mode=0755
+    with_items:
+      - { src: host_delete.py.j2, dest: /var/lib/zabbix/host_delete.py }
+      - { src: interface_name.j2, dest: /var/lib/zabbix/interface_name }
+  
+  - name: modify owner and group for /var/lib/zabbix
+    file: path=/var/lib/zabbix owner=zabbix group=zabbix recurse=yes state=directory mode=0755
+  
+  - name: run /var/lib/zabbix/host_delete.py
+    shell: python /var/lib/zabbix/host_delete.py
+  
+  - name: run /var/lib/zabbix/zabbix_items.py
+    shell: "{{ item }}"
+    with_items: 
+      - python /var/lib/zabbix/zabbix_items.py
+  
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+

@@ -1,0 +1,16 @@
+{% if item.port == ext_card or item.port == mg_card %}
+TYPE=OVSPort
+{% else %}
+TYPE=Ethernet
+{% endif %}
+BOOTPROTO=static
+IPV6INIT=no
+DEVICE={{ item.port }}
+ONBOOT=yes
+{% if item.br_name is defined %}
+OVS_BRIDGE={{ item.br_name }}
+{% else %}
+IPADDR={{ item.ip }}
+NETMASK={{ item.mask }}
+{% endif %}
+DEVICETYPE=ovs

@@ -1,0 +1,56 @@
+---
+# tasks file for database
+
+- name: stop all mysql/mariadb process
+  shell: "ps -ef |egrep 'mysql|mariadb'|grep -v grep|awk '{print $2}'|xargs kill -9"
+  register: kill_db
+  failed_when: kill_db.rc != 0 and kill_db.rc != 123
+
+- name: remove existing mysql package
+  yum: name={{ item }} state=absent
+  with_items:
+    - prefix
+    - MariaDB-client
+    - MariaDB-Galera-server
+    - galera
+    - mysql
+    - MySQL-python
+    - mariadb-config
+
+- name: clean up database and config files
+  file: path={{ item }} state=absent
+  with_items:
+    - /var/lib/mysql/
+    - /etc/my.cnf
+    - /etc/my.cnf.d/
+    - /usr/share/mysql/
+
+- name: install MariaDB with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - MariaDB-client
+    - MariaDB-Galera-server
+    - galera
+    - MySQL-python
+
+- name: render server.conf
+  template: src=server.conf.j2 dest=/etc/my.cnf
+
+- name: modify my.cnf
+  ini_file:
+    path: /etc/my.cnf
+    section: mysqld
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items:
+    - { option: open_files_limit, value: 10000 }
+    - { option: max_connections, value: 10000 }
+    #- { option: default_authentication_plugin, value: mysql_native_password }
+
+- name: bootstrap mysql cluster on first node
+  shell: service mysql start
+
+- name: wait for service start
+  wait_for: host={{ vip }} port=3306
+
+- include: security.yml

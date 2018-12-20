@@ -1,0 +1,17 @@
+clouds:
+  local_bypass:
+    auth_type: token_endpoint
+    identity_api_version: 3
+    auth:
+      token: {{ os_token }}
+      url: http://{{ controller_vhostname }}:35357/v3
+  admin_cloud:
+    auth_type: password
+    identity_api_version: 3
+    auth:
+      auth_url: http://{{ controller_vhostname }}:5000/v3
+      #auth_type: password
+      username: admin
+      password: {{ openstack_admin_password }}
+      project_name: admin
+      default_domain_name: Default

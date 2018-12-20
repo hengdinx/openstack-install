@@ -1,0 +1,72 @@
+
+#- name: Get list of services
+#  shell: "openstack service list -f value -c Name |grep keystone"
+#  register: keystone_exists
+
+- name: create keystone service
+  os_keystone_service:
+    cloud: local_bypass
+    name: keystone
+    state: present
+    service_type: identity
+    description: "OpenStack Identity"
+  register: result
+  until: not result.failed
+  retries: 5
+  delay: 10
+
+#  when: 'keystone_exists.rc != 0'
+    
+#- name: Get list of projects
+#  shell: "openstack project list -f value -c Name --domain default"
+#  register: openstack_projects
+
+- name: create project
+  os_project:
+    cloud: local_bypass
+    name: service
+    state: present
+    domain: default
+    description: "Service Project"
+  register: result
+  until: not result.failed
+  retries: 5
+  delay: 10
+#  when: '"service" not in openstack_projects.stdout'
+
+- name: create roles
+  os_keystone_role:
+    cloud: local_bypass
+    state: present
+    name: "{{ item }}"
+  with_items:
+    - user
+    - teacher
+    - office
+  register: result
+  until: not result.failed
+  retries: 5
+  delay: 10
+
+- name: create keystone users
+  os_user:
+    cloud: local_bypass
+    state: present
+    name: "{{ item.user }}"
+    password: "{{ item.password }}"
+    domain: default
+  with_items:
+    - { user: nova, password: "{{ openstack_nova_password }}" }
+    - { user: neutron, password: "{{ openstack_neutron_password }}" }
+    - { user: cinder, password: "{{ openstack_cinder_password }}" }
+    - { user: glance, password: "{{ openstack_glance_password }}" }
+    - { user: placement, password: "{{ openstack_placement_password }}" }
+    - { user: apiadmin, password: "{{ openstack_apiadmin_password }}" }
+
+- name: create group_root
+  os_group:
+    cloud: admin_cloud
+    state: present
+    name: group_root
+    description: "Group Root"
+

@@ -1,0 +1,32 @@
+# network config
+
+- name: rm all ifcfg files
+  shell: "rm -f /etc/sysconfig/network-scripts/ifcfg-*"
+
+- name: copy ifcfg-lo to remote
+  copy: src=ifcfg-lo dest=/etc/sysconfig/network-scripts/ifcfg-lo
+
+- name: render config files for bridges
+  template: src=br-template.j2 dest=/etc/sysconfig/network-scripts/ifcfg-{{ item.port }}
+  with_items:
+    - { port: br-ex, mask: "{{ ext_netmask }}", ip: "{{ ext_ip }}" }
+    - { port: br-eth1, mask: "{{ mg_netmask }}", ip: "{{ mg_ip }}" }
+  when: 'item.ip != "" and item.ip != None'
+
+- name: render config files for NICs
+  template: src=nic-template.j2 dest=/etc/sysconfig/network-scripts/ifcfg-{{ item.port }}
+  with_items:
+    - { port: "{{ sto_internal_card }}", ip: "{{ sto_internal_ip }}", mask: "{{ sto_internal_netmask }}" }
+    - { port: "{{ ext_card }}", ip: "{{ ext_ip }}", mask: "{{ ext_netmask }}", br_name: "br-ex"}
+    - { port: "{{ mg_card }}", ip: "{{ mg_ip }}", mask: "{{ mg_netmask }}", br_name: "br-eth1"}
+  when: 'item.ip != "" and item.ip != None'
+
+- name: render cluster net nic config
+  template: src=nic-template.j2 dest=/etc/sysconfig/network-scripts/ifcfg-{{ item.port }}
+  with_items:
+    - { port: "{{ cluster_card }}", ip: "{{ cluster_ip }}", mask: "{{ cluster_netmask }}" }
+    - { port: "{{ sto_card }}", ip: "{{ sto_ip }}", mask: "{{ sto_netmask }}" }
+  when: 'item.port != mg_card and item.port != "" and item.port != None'
+
+- name: restart network
+  service: name=network state=restarted enabled=yes

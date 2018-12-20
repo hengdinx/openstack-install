@@ -1,0 +1,141 @@
+---
+# tasks file for glance
+
+- name: cleanup packages
+  yum: name={{ item }} state=absent
+  with_items:
+    - openstack-glance
+    - python-glance
+
+- name: install packages
+  yum: name={{ item }} state=latest
+  with_items:
+    - openstack-glance
+    - python-glance
+    - python-glanceclient
+
+- name: config /etc/glance/glance-api.conf for controller
+  ini_file:
+    path: /etc/glance/glance-api.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: debug, value: True }
+    - { section: DEFAULT, option: registry_host, value: "{{ controller_vhostname }}" }
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: DEFAULT, option: bind_host, value: "{{ cluster_ip }}" }
+    - { section: keystone_authtoken, option: auth_uri, value: "http://{{ controller_vhostname }}:5000" }
+    - { section: keystone_authtoken, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: keystone_authtoken, option: memcached_servers, value: "{{ controller_vhostname }}:11211" }
+    - { section: keystone_authtoken, option: auth_type, value: password }
+    - { section: keystone_authtoken, option: project_domain_name, value: default }
+    - { section: keystone_authtoken, option: user_domain_name, value: default }
+    - { section: keystone_authtoken, option: project_name, value: service }
+    - { section: keystone_authtoken, option: username, value: glance }
+    - { section: keystone_authtoken, option: password, value: "{{ openstack_glance_password }}" }
+    - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/glance" }
+    - { section: paste_deploy, option: flavor, value: keystone }
+    - { section: glance_store, option: stores, value: "file,http" }
+    - { section: glance_store, option: default_store, value: file }
+    - { section: glance_store, option: filesystem_store_datadir, value: /var/lib/glance/images/ }
+    - { section: oslo_messaging_rabbit, option: rabbit_ha_queues, value: true }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_interval, value: 1 }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_backoff, value: 2 }
+    - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 0 }
+    - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 30 }
+    - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+
+- name: config /etc/glance/glance-registry.conf for controller
+  ini_file:
+    path: /etc/glance/glance-registry.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/glance" }
+    - { section: keystone_authtoken, option: auth_uri, value: "http://{{ controller_vhostname }}:5000" }
+    - { section: keystone_authtoken, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: keystone_authtoken, option: memcached_servers, value: "{{ controller_vhostname }}:11211" }
+    - { section: keystone_authtoken, option: auth_type, value: password }
+    - { section: keystone_authtoken, option: project_domain_name, value: default }
+    - { section: keystone_authtoken, option: user_domain_name, value: default }
+    - { section: keystone_authtoken, option: project_name, value: service }
+    - { section: keystone_authtoken, option: username, value: glance }
+    - { section: keystone_authtoken, option: password, value: "{{ openstack_glance_password }}" }
+    - { section: paste_deploy, option: flavor, value: keystone }
+    - { section: DEFAULT, option: debug, value: True }
+    - { section: DEFAULT, option: registry_host, value: "{{ controller_vhostname }}" }
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: DEFAULT, option: bind_host, value: "{{ cluster_ip }}" }
+    - { section: oslo_messaging_rabbit, option: rabbit_ha_queues, value: true }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_interval, value: 1 }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_backoff, value: 2 }
+    - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 0 }
+    - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 30 }
+    - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+
+- include: glance_ha_config.yml
+  when: ha_enabled == True
+
+- block:
+  - name: create database for glance
+    mysql_db: name={{ item }} login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+    with_items:
+      - glance
+
+  - name: grant roles for glance users
+    os_user_role:
+      cloud: admin_cloud
+      user: "{{ item.user }}"
+      role: admin
+      project: "{{ item.project }}"
+    with_items:
+      - { user: glance, project: service }
+
+  - name: create glance serivce
+    os_keystone_service:
+      cloud: admin_cloud
+      name: "{{ item.name }}"
+      state: present
+      service_type: "{{ item.type }}"
+      description: "{{ item.description }}"
+    with_items:
+      - { name: 'glance', type: 'image', description: 'OpenStack Image'}
+
+  - name: Create endpoint for glance
+    os_keystone_endpoint:
+      cloud: admin_cloud
+      service: glance
+      endpoint_interface: "{{ item }}"
+      url: "http://{{ controller_vhostname }}:9292"
+      region: "{{ region_name }}"
+      state: present
+    with_items:
+      - public
+      - internal
+      - admin
+
+  - name: glance-manage db sync
+    register: result
+    shell: "glance-manage db_sync"
+    become: true
+    become_user: glance
+    until: result.rc == 0
+    retries: 10
+    delay: 10
+
+  - include: glance_pcs_restart.yml
+    when: ha_enabled == True
+
+  - include: glance_service_restart.yml
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: start openstack-glance-task service on nodes with compute and controller role
+  service: name=openstack-glance-task state=restarted enabled=yes
+  when: '"controller" in my_role and "compute" in my_role'
+

@@ -1,0 +1,70 @@
+---
+# tasks file for pcs
+
+- name: cleanup pcs
+  yum: name={{ item }} state=absent
+  with_items:
+    - pcs
+    - pacemaker
+    - corosync
+    - fence-agents-all
+    - resource-agents
+
+- name: start httpd service
+  service: name=httpd state=started enabled=yes
+
+- name: install pcs
+  yum: name={{ item }} state=latest
+  with_items:
+    - pcs
+    - pacemaker
+    - corosync
+    - fence-agents-all
+    - resource-agents
+
+- name: remove /etc/corosync/corosync.conf
+  file: path=/etc/corosync/corosync.conf state=absent
+
+#- name: render /etc/corosync/corosync.conf
+#  template: src=corosync.conf.j2 dest=/etc/corosync/corosync.conf
+
+- name: modify passwd for hacluster
+  user: name=hacluster password={{ hacluster_pass | password_hash('sha512') }}
+
+- name: start pcsd and corosync
+  service: name={{ item }} state=started enabled=yes
+  with_items:
+    - pcsd
+
+- block:
+    - name: set auth for pcs
+      command: pcs cluster auth {% for i in controllers %}"{{ i['hostname'] }}" {% endfor %} -u hacluster -p hacluster --force
+
+    - name: set cluster name
+      command: pcs cluster setup --force --name openstack-cluster {% for i in controllers %}"{{ i['hostname'] }}" {% endfor %}
+
+    - command: pcs cluster enable --all
+    - command: pcs cluster start --all
+    - command: pcs property set pe-warn-series-max=1000 pe-input-series-max=1000 pe-error-series-max=1000 cluster-recheck-interval=5min
+    - command: pcs property set stonith-enabled=false
+    - command: pcs property set no-quorum-policy=stop
+
+    - name: remove vip resource
+      command: pcs resource delete vip
+      register: del_vip
+      failed_when: del_vip.rc != 0 and "does not exist" not in del_vip.stderr
+
+    - name: create vip resource
+      command: pcs resource create vip ocf:heartbeat:IPaddr2 ip={{ vip }} cidr_netmask={{ vip_prefix }} op monitor interval="30s" on-fail="restart" --force
+    - command: pcs resource op defaults timeout=90s
+
+    - name: ensure vip resource is started
+      shell: 'pcs status|grep vip'
+      register: vip_status
+      retries: 5
+      delay: 10
+      until: '"Started" in vip_status.stdout'
+  #when: hostname == controllers[0]
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: action_type == "install"

@@ -1,0 +1,3 @@
+#!/bin/bash
+sleep 50
+/usr/bin/mount -t glusterfs 127.0.0.1:/mygfs /var/lib/zero/OTC

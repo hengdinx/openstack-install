@@ -1,0 +1,170 @@
+---
+# tasks file for neutron
+
+- block:
+
+  - name: cleanup neutron db
+    mysql_db: name=neutron login_user=root login_host={{ vip }} login_password={{ mysql_root_password }} state=absent
+
+  - name: cleanup neutron resource
+    shell: 'pcs resource delete {{ item }}'
+    with_items:
+      - neutron-server
+      - neutron-openvswitch-agent
+      - neutron-dhcp-agent
+      - neutron-l3-agent
+      - neutron-metadata-agent
+    register: result
+    failed_when: result.rc != 0 and "does not exist" not in result.stderr
+    when: ha_enabled == True
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: cleanup neutron packages
+  yum: name={{ item }} state=absent
+  with_items:
+    - openstack-neutron
+    - openstack-neutron-ml2
+    - openstack-neutron-openvswitch.noarch
+    - python2-networking-hyperv
+
+- name: install neutron packages
+  yum: name={{ item }} state=latest
+  with_items:
+    - openstack-neutron
+    - openstack-neutron-ml2
+    - ebtables
+    - openstack-neutron-openvswitch.noarch
+    - python2-networking-hyperv
+
+- name: config /etc/neutron/neutron.conf for controller
+  ini_file:
+    path: /etc/neutron/neutron.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: debug, value: True }
+    - { section: DEFAULT, option: registry_host, value: "{{ controller_vhostname }}" }
+    - { section: DEFAULT, option: bind_host, value: "{{ cluster_ip }}" }
+    - { section: DEFAULT, option: core_plugin, value: ml2 }
+    - { section: DEFAULT, option: service_plugins, value: router }
+    - { section: DEFAULT, option: notify_nova_on_port_status_changes, value: True }
+    - { section: DEFAULT, option: notify_nova_on_port_data_changes, value: True }
+    - { section: nova, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: nova, option: auth_type, value: password }
+    - { section: nova, option: project_domain_name, value: default }
+    - { section: nova, option: user_domain_name, value: default }
+    - { section: nova, option: region_name, value: "{{ region_name }}" }
+    - { section: nova, option: project_name, value: service }
+    - { section: nova, option: username, value: nova }
+    - { section: nova, option: password, value: "{{ openstack_nova_password }}" }
+
+- name: config /etc/neutron/plugins/ml2/ml2_conf.ini for controller
+  ini_file:
+    path: /etc/neutron/plugins/ml2/ml2_conf.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: ml2, option: type_drivers, value: "flat,vlan,vxlan" }
+    - { section: ml2, option: tenant_network_types, value: vxlan }
+    - { section: ml2, option: mechanism_drivers, value: "openvswitch,l2population,hyperv" }
+    - { section: ml2, option: extension_drivers, value: extension_drivers }
+    - { section: ml2_type_vlan, option: network_vlan_ranges, value: "provider:1:4000" }
+    - { section: ml2_type_vxlan, option: vni_ranges, value: "1:4000" }
+    - { section: securitygroup, option: enable_security_group, value: True }
+    - { section: securitygroup, option: enable_ipset, value: True }
+    - { section: securitygroup, option: firewall_driver, value: neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver }
+    - { section: ml2_type_flat, option: flat_networks, value: "{% if ext_card == '' or ext_card == None %}provider{% elif ext_card != '' and ext_card != None %}default,provider{% endif %}" }
+
+- name: config /etc/neutron/dhcp_agent.ini for controller
+  ini_file:
+    path: /etc/neutron/dhcp_agent.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: interface_driver, value: neutron.agent.linux.interface.OVSInterfaceDriver }
+    - { section: DEFAULT, option: enable_isolated_metadata, value: True }
+    - { section: DEFAULT, option: enable_metadata_network, value: True }
+
+- include: roles/neutron/neutron_all.yml
+
+- include: neutron_ha_config.yml
+  when: ha_enabled == True
+
+#- name: restart openvswitch service
+#  service: name={{ item }} state=restarted sleep=10 enabled=yes use=service
+#  with_items:
+#    - openvswitch
+#    - network
+#
+#- name: restart network
+#  shell: "systemctl stop openvswitch; systemctl start openvswicth; systemctl restart network"
+#
+#- name: wait until network service restarted
+#  wait_for_connection: delay=100 timeout=120
+
+- block:
+
+  - name: create database for neutron
+    mysql_db: name={{ item }} login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+    with_items:
+      - neutron
+
+  - name: grant roles for neutron users
+    os_user_role:
+      cloud: admin_cloud
+      user: "{{ item.user }}"
+      role: admin
+      project: "{{ item.project }}"
+    with_items:
+      - { user: neutron, project: service }
+
+  - name: create neutron serivce
+    os_keystone_service:
+      cloud: admin_cloud
+      name: "{{ item.name }}"
+      state: present
+      service_type: "{{ item.type }}"
+      description: "{{ item.description }}"
+    with_items:
+      - { name: neutron, type: network, description: 'OpenStack Networking'}
+
+  - name: Create endpoint for neutron
+    os_keystone_endpoint:
+      cloud: admin_cloud
+      service: neutron
+      endpoint_interface: "{{ item }}"
+      url: "http://{{ controller_vhostname }}:9696"
+      region: "{{ region_name }}"
+      state: present
+    with_items:
+      - public
+      - internal
+      - admin
+
+  - name: neutron-manage db sync
+    register: result
+    shell: "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head"
+    become: true
+    become_user: neutron
+    until: result.rc == 0
+    retries: 10
+    delay: 10
+
+  - include: neutron_pcs_restart.yml
+    when: ha_enabled == True
+
+  - include: neutron_service_restart.yml
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+
+
+

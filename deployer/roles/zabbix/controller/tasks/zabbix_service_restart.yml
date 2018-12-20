@@ -1,0 +1,4 @@
+---
+
+- name: restart zabbix-server
+  service: name=zabbix-server-mysql state=started enabled=yes

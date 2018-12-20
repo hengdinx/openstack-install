@@ -1,0 +1,76 @@
+---
+# tasks file for nova
+
+- name: config /etc/nova/nova.conf basic settings
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: enabled_apis, value: "osapi_compute,metadata" }
+    - { section: DEFAULT, option: rpc_backend, value: rabbit }
+    - { section: DEFAULT, option: debug, value: True }
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password}}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: DEFAULT, option: use_neutron, value: True }
+    - { section: DEFAULT, option: firewall_driver, value: nova.virt.firewall.NoopFirewallDriver }
+    - { section: DEFAULT, option: reclaim_instance_interval, value: 31536000 }
+    - { section: DEFAULT, option: allow_resize_to_same_host, value: false }
+    - { section: DEFAULT, option: vif_plugging_is_fatal, value: true }
+    - { section: DEFAULT, option: resize_confirm_window, value: 1 }
+    - { section: DEFAULT, option: vif_plugging_timeout, value: 300 }
+    - { section: DEFAULT, option: my_ip, value: "{{ cluster_ip }}" }
+    - { section: DEFAULT, option: rpc_conn_pool_size, value: 100 }
+    - { section: key_manager, option: fixed_key, value: "{{ openstack_key }}" }
+    - { section: oslo_messaging_rabbit, option: rabbit_ha_queues, value: true }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_interval, value: 1 }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_backoff, value: 2 }
+    - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 0 }
+    - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 60 }
+    - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+    - { section: oslo_messaging_rabbit, option: rabbit_userid, value: openstack }
+    - { section: oslo_messaging_rabbit, option: rabbit_password, value: "{{ openstack_rabbitmq_password}}" }
+    - { section: keystone_authtoken, option: auth_uri, value: "http://{{ controller_vhostname }}:5000" }
+    - { section: keystone_authtoken, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: keystone_authtoken, option: memcached_servers, value: "{{ controller_vhostname }}:11211" }
+    - { section: keystone_authtoken, option: auth_type, value: password }
+    - { section: keystone_authtoken, option: project_domain_name, value: default }
+    - { section: keystone_authtoken, option: user_domain_name, value: default }
+    - { section: keystone_authtoken, option: project_name, value: service }
+    - { section: keystone_authtoken, option: username, value: nova }
+    - { section: keystone_authtoken, option: password, value: "{{ openstack_nova_password }}" }
+    - { section: glance, option: api_servers, value: "http://{{ controller_vhostname }}:9292" }
+    - { section: oslo_concurrency, option: lock_path, value: /var/lib/nova/tmp }
+    - { section: cinder, option: os_region_name, value: "{{ region_name }}" }
+    - { section: placement, option: os_region_name, value: "{{ region_name }}" }
+    - { section: placement, option: project_domain_name, value: Default }
+    - { section: placement, option: project_name, value: service }
+    - { section: placement, option: auth_type, value: password }
+    - { section: placement, option: user_domain_name, value: Default }
+    - { section: placement, option: auth_url, value: "http://{{ controller_vhostname }}:35357/v3" }
+    - { section: placement, option: username, value: placement }
+    - { section: placement, option: password, value: "{{ openstack_placement_password }}" }
+    - { section: scheduler, option: discover_hosts_in_cells_interval, value: 10 }
+    #- { section: filter_scheduler, option: available_filters, value: "nova.scheduler.filters.pci_passthrough_filter.PciPassthroughFilter" }
+    - { section: pci, option: passthrough_whitelist, value: '[{DQvendor_idDQ: DQ1002DQ, DQproduct_idDQ: DQ692fDQ}]' }
+    - { section: vnc, option: enabled, value: true }
+    - { section: vnc, option: vncserver_listen, value: 0.0.0.0 }
+    - { section: vnc, option: vncserver_proxyclient_address, value: "{{ cluster_ip }}" }
+    - { section: vnc, option: novncproxy_base_url, value: "http://{{ vip }}:6080/vnc_auto.html" }
+    - { section: spice, option: enabled, value: true }
+    - { section: spice, option: server_proxyclient_address, value: "{{ cluster_ip }}" }
+    - { section: spice, option: keymap, value: en-us }
+    - { section: spice, option: html5proxy_port, value: 6082 }
+    - { section: spice, option: html5proxy_base_url, value: "http://{{ cluster_ip }}:6082/spice_auto.html" }
+    - { section: spice, option: server_listen, value: 0.0.0.0 }
+    - { section: spice, option: html5proxy_host, value: "{{ cluster_ip }}" }
+    - { section: neutron, option: url, value: "http://{{ controller_vhostname }}:9696" }
+    - { section: neutron, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: neutron, option: auth_type, value: password }
+    - { section: neutron, option: project_domain_name, value: default }
+    - { section: neutron, option: user_domain_name, value: default }
+    - { section: neutron, option: region_name, value: "{{ region_name }}" }
+    - { section: neutron, option: project_name, value: service }
+    - { section: neutron, option: username, value: neutron }
+    - { section: neutron, option: password, value: "{{ openstack_neutron_password }}" }
+

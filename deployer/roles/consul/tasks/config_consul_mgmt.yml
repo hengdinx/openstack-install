@@ -1,0 +1,29 @@
+---
+
+- name: cleanup consul dirs
+  file: path={{ item }} state=absent
+  with_items:
+    - /opt/consul0
+
+- name: create dirs for consul
+  file: path={{ item }} state=directory
+  with_items:
+    - /opt/consul0
+    - /opt/consul0/consul.d
+    - /opt/consul0/data
+
+- name: render service file
+  template: src={{ item }}.service.j2 dest=/usr/lib/systemd/system/{{ item }}.service
+  with_items:
+    - consul-mgmt
+  when: '("controller" in my_role) or (["controller"] | intersect(my_role) == [])'
+  #when: '("controller" in my_role) or ("compute" in my_role and "controller" not in my_role)'
+
+- include: consul_ha_config_mgmt.yml
+  when: ha_enabled == True
+
+- include: consul_pcs_restart_mgmt.yml
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+

@@ -1,0 +1,94 @@
+---
+# tasks file for lbs
+
+- name: clean up lbs resource
+  shell: pcs resource delete lbs
+  register: result
+  failed_when: result.rc != 0 and "does not exist" not in result.stderr
+  when: ha_enabled == True and action_type == "install"
+
+- name: cleanup lbs
+  yum: name=lbs state=absent
+  register: result
+  until: result.rc == 0
+  retries: 5
+  delay: 5
+
+- name: install lbs
+  yum: name=lbs state=latest
+  register: result
+  until: result.rc == 0
+  retries: 5
+  delay: 5
+
+- name: check /var/lib/zero/OTC/etc/lbs.ini
+  shell: ls /var/lib/zero/OTC/etc/lbs.ini
+  register: result
+  until: result.rc == 0
+  retries: 5
+  delay: 5
+
+- name: config /var/lib/zero/OTC/etc/lbs.ini
+  ini_file:
+    path: /var/lib/zero/OTC/etc/lbs.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+    mode: 0755
+  with_items:
+    - { section: lbs, option: db_ip, value: "{{ vip }}" }
+    - { section: lbs, option: db_user, value: "{{ mysql_lbs_user }}" }
+    - { section: lbs, option: db_passwd, value: "{{ mysql_lbs_password }}" }
+  register: result_ini
+  until: 'result_ini.msg == "OK" or result_ini.msg == "All items completed"'
+  retries: 5
+  delay: 5
+
+- block:
+  - name: cleanup lbs db
+    mysql_db:
+      login_host: "{{ vip }}"
+      login_user: root
+      login_password: "{{ mysql_root_password }}"
+      name: lbs
+      state: absent
+  
+  - name: delete lbs mysql user
+    mysql_user:
+      login_user: root
+      login_password: "{{ mysql_root_password }}"
+      login_host: "{{ vip }}"
+      name: lbs
+      state: absent
+  
+  - name: copy lb.sql to remote
+    copy: src=lb.sql dest=/tmp/
+  
+  - name: import lb.sql
+    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=lbs state=import target=/tmp/lb.sql
+
+  - name: create lbs user
+    mysql_user:
+      login_password: "{{ mysql_root_password }}"
+      login_user: root
+      login_host: "{{ vip }}"
+      name: "{{ mysql_lbs_user }}"
+      host: "{{ item }}"
+      priv: "lbs.*:ALL,GRANT"
+      password: "{{ mysql_lbs_password }}"
+    with_items:
+      - "%"
+      - 127.0.0.1
+      - ::1
+      - "localhost"
+  
+  - include: lbs_pcs_restart.yml
+    when: ha_enabled == True
+
+  - name: restart lbs service
+    service: name=lbs state=stopped enabled=no
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'

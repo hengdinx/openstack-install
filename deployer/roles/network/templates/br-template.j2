@@ -1,0 +1,11 @@
+TYPE=OVSBridge
+BOOTPROTO=static
+IPV6INIT=no
+DEVICE={{ item.port }}
+ONBOOT=yes
+IPADDR={{ item.ip }}
+NETMASK={{ item.mask }}
+{% if item.port == 'br-ex' or ext_card == "" or ext_card == None %}
+GATEWAY={{ gateway }}
+{% endif %}
+DEVICETYPE=ovs

@@ -1,0 +1,79 @@
+{"deploy_conf":{
+"deploy_ip_mg": "10.10.40.11",
+"deploy_ip_sto": "",
+"deploy_netmask": "255.255.255.0",
+"action_type": "add_compute",
+"nodes": [
+{
+"hostname":"compute1",
+"root_password": "1",
+"node_role":["compute"],
+"mg_net":{
+"port":"eth0",
+"ip":"10.10.40.14",
+"netmask":"255.255.255.0"
+},
+"tenant_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_internal_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"ex_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"cluster_net":{
+"port":"",
+"ip":"",
+"netmask":""
+}
+},
+{
+"hostname": "compute2",
+"root_password": "1",
+"node_role":["compute"],
+"mg_net":{
+"port":"eth0",
+"ip":"10.10.40.17",
+"netmask":"255.255.255.0"
+},
+"tenant_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_internal_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"ex_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"cluster_net":{
+"port":"",
+"ip":"",
+"netmask":""
+}
+}
+]
+}
+}

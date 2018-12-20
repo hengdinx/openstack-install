@@ -1,0 +1,15 @@
+[Unit]
+Description=consul server on storage_network
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/consul
+Restart=on-failure
+ExecStart=/usr/bin/consul agent{% if hostname in groups.controller %} -bootstrap-expect {% if ha_enabled %}2{% else %}1{% endif %} -server{% endif %} -data-dir /opt/consul1/data/ -node {{ hostname }}.{{ domain }} -bind={{ sto_ip }} -config-dir /opt/consul1/consul.d/ -enable-script-checks=true -datacenter=sto_dc -ui -client {{ sto_ip }} {% for i in controllers %}{% if i['mg_ip'] != mg_ip %} -retry-join {{ i['sto_ip'] }}{% endif %}{% endfor %}  -encrypt=31sldmeGDh+btHSyzZQrRw==
+
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+

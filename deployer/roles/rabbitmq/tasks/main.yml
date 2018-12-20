@@ -1,0 +1,122 @@
+---
+# tasks file for rabbitmq
+
+- name: cleanup rabbitmq-server service
+  yum: name={{ item }} state=absent
+  with_items:
+    - rabbitmq-server
+
+- name: cleanup /var/lib/rabbitmq/.erlang.cookie
+  file: path={{ item }} state=absent
+  with_items:
+    - /usr/lib/rabbitmq/
+    - /var/lib/rabbitmq/
+
+- name: install rabbitmq
+  yum: name={{ item }} state=latest
+  with_items:
+    - rabbitmq-server
+
+- name: copy /etc/security/limits.d/20-nproc.conf
+  copy: src=20-nproc.conf dest=/etc/security/limits.d/20-nproc.conf
+
+- name: set ulimit
+  shell: "ulimit -n 65535"
+
+- name: modify rabbitmq service file
+  ini_file:
+    path: /usr/lib/systemd/system/rabbitmq-server.service
+    section: Service
+    option: LimitNOFILE
+    value: 65535
+    mode: 0644
+    backup: yes
+
+- name: add delay for rabbitmq service
+  ini_file:
+    path: /usr/lib/systemd/system/rabbitmq-server.service
+    section: Service
+    option: ExecStartPre
+    value: "/bin/sleep 30"
+
+- name: render rabbitmq config file
+  template: src=rabbitmq.config.j2 dest=/etc/rabbitmq/rabbitmq.config
+
+- name: restart rabbitmq
+  service: name=rabbitmq-server  state=restarted enabled=yes
+
+- name: kick out recover node from the cluster
+  shell: rabbitmqctl forget_cluster_node rabbit@{{ hostname }}
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "recover_controller"'
+  register: result
+  failed_when: result.rc != 0 and result.rc != 2
+
+- block:
+  - name: start first rabbitmq-server service
+    systemd: state=restarted daemon_reload=yes name=rabbitmq-server enabled=yes
+  
+  - name: copy first cookie to local
+    fetch:
+      src: /var/lib/rabbitmq/.erlang.cookie
+      dest: /tmp/.erlang.cookie
+      flat: yes
+  when: 'hostname == master_node and action_type == "install"'
+
+- block:
+  - name: copy local cookie to other
+    copy:
+      src: /tmp/.erlang.cookie
+      dest: /var/lib/rabbitmq/.erlang.cookie
+      owner: rabbitmq
+      group: rabbitmq
+      mode: 0400
+  
+  - name: start other rabbitmq-server service
+    systemd: state=restarted daemon_reload=yes name=rabbitmq-server enabled=yes
+  
+  - name: stop app
+    command: rabbitmqctl stop_app
+
+  - name: reset rabbitmq when recover
+    shell: rabbitmqctl reset
+    when: 'action_type == "recover_controller"'
+  
+  - name: join cluster
+    shell: "rabbitmqctl join_cluster rabbit@{{ master_node }} --ram"
+  
+  - name: start app
+    command: rabbitmqctl start_app
+
+  - name: Enables the rabbitmq_management plugin
+    rabbitmq_plugin:
+      names: rabbitmq_management
+      state: enabled
+  when: 'hostname != master_node or action_type == "recover_controller"'
+
+- block:
+  - name: set policy
+    rabbitmq_policy:
+      name: ha-all
+      pattern: ^(?!amq\.).*
+    args:
+      tags:
+        ha-mode: all
+
+  - name: add openstack user
+    rabbitmq_user:
+      name: openstack
+      password: "{{ openstack_rabbitmq_password }}"
+      configure_priv: .*
+      read_priv: .*
+      write_priv: .*
+      tags: administrator
+      state: present
+
+  - name: Enables the rabbitmq_management plugin
+    rabbitmq_plugin:
+      names: rabbitmq_management
+      state: enabled
+  when: 'hostname == master_node and action_type == "install"'
+
+- meta: flush_handlers

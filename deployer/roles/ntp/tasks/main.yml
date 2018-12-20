@@ -1,0 +1,14 @@
+---
+# tasks file for ntp
+
+- name: config ntp service
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: 0644
+
+- name: restart chronyd
+  service: name=chronyd state=restarted enabled=yes
+

@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+#coding=utf-8
+import MySQLdb
+import time
+import datetime
+import calendar
+
+
+# Create your views here.
+import json
+import urllib2
+import sys
+import os
+ip="{{ cluster_ip }}"
+hostip='{% if "controller" in my_role %}127.0.0.1{% elif "compute" in my_role and "controller" not in my_role %}{{ cluster_ip }}{% endif %}'
+# Create your views here.
+url = "http://"+ip+"/zabbix/api_jsonrpc.php"
+#print url
+header = {"Content-Type": "application/json"}
+
+#zabbix login
+def user_login():
+    data = json.dumps({
+        "jsonrpc": "2.0",
+        "method": "user.login",
+        "params": {"user": "admin", "password": "qwer1234"},
+        "id": 0})
+    request = urllib2.Request(url, data)
+    for key in header:
+        request.add_header(key, header[key])
+    try:
+        result = urllib2.urlopen(request)
+    except urllib2.URLError as e:
+        print "Auth Failed, Please Check Your Name And Password:", e.code
+    else:
+        response1 = json.loads(result.read())
+        result.close()
+        authID = response1['result']
+        return authID
+def get_data(data,ip):
+    request = urllib2.Request(url, data)
+    for key in header:
+        request.add_header(key, header[key])
+    try:
+        result = urllib2.urlopen(request)
+    except urllib2.URLError as e:
+        if hasattr(e, 'reason'):
+            print 'We failed to reach a server.'
+            print 'Reason: ', e.reason
+        elif hasattr(e, 'code'):
+            print 'The server could not fulfill the request.'
+            print 'Error code: ', e.code
+            return 0
+    else:
+        response = json.loads(result.read())
+        result.close()
+        # print response
+        return response
+def conn(ip):
+  #  print type(ip)
+    conn= MySQLdb.connect(
+        host=ip,
+        port = 3306,
+        user='zabbixsrv',
+        passwd='qwer1234',
+        db ='zabbix',
+    #    charset='utf8',
+        )
+  
+    cur = conn.cursor()
+    return cur,conn
+
+def hostid_get(ip,hostip):
+    cur=conn(ip)
+    sql_content="select * from interface where ip='%s'"%(hostip)
+    aa=cur[0].execute(sql_content)
+    info = cur[0].fetchmany(aa)
+    if not info:
+        return 'error'
+    host=list(info[0])
+    hostid=host[1]
+    return hostid
+def action_del(ip,hostip):
+    cur=conn(ip)
+    name_tmp='interface_'+hostip+'_warning'
+    sql_content="delete from actions where name='%s'"%(name_tmp)
+    tmp=cur[0].execute(sql_content)
+
+    cur[1].commit()
+    cur[0].close()
+    cur[1].close()
+    return tmp
+action_del(ip,hostip)
+def cleared_history_str(ip,hostip):
+    cur=conn(ip)
+    sql_content="delete from cloud_history where hostid in(select hostid from interface where ip='%s')" %(hostip)
+    tmp=cur[0].execute(sql_content)
+
+    cur[1].commit()
+    cur[0].close()
+    cur[1].close()
+    return tmp
+cleared_history_str(ip,hostip)
+###################################################################
+def host_delete(ip,hostip):
+    authID=user_login()
+#    print ip
+ #   print hostip
+    hostid=hostid_get(ip,hostip)
+#    status = raw_input("please input your delete host :")
+  #  print hostid
+    data = json.dumps(
+        {
+                "jsonrpc":"2.0",
+                "method":"host.delete",
+                "params":[{"hostid":hostid}],
+                "auth":authID,
+                "id":1
+        })
+    res=get_data(data,ip)
+    return res
+host_delete(ip,hostip)

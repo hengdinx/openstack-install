@@ -1,0 +1,44 @@
+---
+
+- name: cleanup openstack-nova resource
+  shell: 'pcs resource delete {{ item }}'
+  with_items:
+    - openstack-nova-api
+    - openstack-nova-scheduler
+    - openstack-nova-conductor
+    - openstack-nova-spicehtml5proxy
+    - openstack-nova-novncproxy
+    - openstack-nova-consoleauth
+  register: result
+  failed_when: result.rc != 0 and "does not exist" not in result.stderr
+
+- name: create openstack-nova resource
+  shell: 'pcs resource create {{ item }} systemd:{{ item }} --clone interleave=true op start interval="0" timeout="300s" op stop interval="0" timeout="300s"'
+  with_items:
+    - openstack-nova-api
+    - openstack-nova-scheduler
+    - openstack-nova-conductor
+    - openstack-nova-novncproxy
+    #- openstack-nova-spicehtml5proxy
+    - openstack-nova-consoleauth
+
+- name: wait until openstack start
+  shell: 'pcs status|grep -A 1 {{ item }}'
+  register: result
+  retries: 5
+  delay: 10
+  until: '"Started" in result.stdout'
+  with_items:
+    - openstack-nova-api
+    - openstack-nova-scheduler
+    - openstack-nova-conductor
+    - openstack-nova-novncproxy
+    #- openstack-nova-spicehtml5proxy
+    - openstack-nova-consoleauth
+
+- name: restart haproxy and httpd
+  shell: "pcs resource restart {{ item }}"
+  with_items:
+    - haproxy
+    - httpd-clone
+

@@ -1,0 +1,6 @@
+---
+# tasks file for openvswitch
+
+- name: install openvswitch
+  yum: name=openvswitch state=latest
+  when: '"controller" in my_role'

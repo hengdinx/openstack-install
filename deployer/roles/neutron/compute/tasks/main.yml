@@ -1,0 +1,49 @@
+---
+
+- name: install neutron packages for compute node
+  yum: name={{ item }} state=latest
+  with_items:
+    - openstack-neutron
+    - openstack-neutron-openvswitch
+
+- name: config /etc/neutron/neutron.conf for compute
+  ini_file:
+    path: /etc/neutron/neutron.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: oslo_concurrency, option: lock_path, value: /var/lib/neutron/tmp }
+
+- name: config /etc/neutron/l3_agent.ini
+  ini_file:
+    path: /etc/neutron/l3_agent.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: agent_mode, value: dvr }
+  when: ha_enabled == True
+
+- include: roles/neutron/neutron_all.yml
+
+- name: stop services
+  service: name={{ item }} state=stopped enabled=yes
+  with_items:
+    - openstack-nova-compute.service
+    - neutron-openvswitch-agent.service
+    - neutron-metadata-agent.service
+    - neutron-l3-agent.service
+
+- name: restart services
+  service: name={{ item }} state=started enabled=yes
+  with_items:
+    - openstack-nova-compute.service
+    - neutron-openvswitch-agent.service
+
+- name: restart l3-agent/metadata-agent services on HA compute node
+  service: name={{ item }} state=started enabled=yes
+  with_items:
+    - neutron-metadata-agent.service
+    - neutron-l3-agent.service
+  when: 'ha_enabled == True or "controller" in my_role'

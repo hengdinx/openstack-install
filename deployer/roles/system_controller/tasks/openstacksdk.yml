@@ -1,0 +1,10 @@
+---
+
+- name: copy openstacksdk files to remote
+  copy: src=whlfiles dest=/tmp/
+
+- name: update pbr
+  shell: pip install --user /tmp/whlfiles/pbr*whl
+
+- name: install openstacksdk
+  shell: pip install --user /tmp/whlfiles/*

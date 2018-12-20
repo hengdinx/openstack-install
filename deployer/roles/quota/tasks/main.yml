@@ -1,0 +1,73 @@
+---
+# tasks file for quota
+
+- block:
+  - name: get admin ID
+    os_project: cloud=admin_cloud name=admin state=present
+    register: project_ret
+
+  - name: nova-manage cell_v2 discover_hosts
+    shell: nova-manage cell_v2 discover_hosts
+    register: result
+    become: true
+    become_user: nova
+    until: result.rc == 0
+    retries: 10
+    delay: 5
+    failed_when: result.rc != 0 and 'already exists' not in result.stdout
+  
+  - name: modify quota
+    os_quota:
+      cloud: admin_cloud
+      name: "{{ project_ret.project.id }}"
+      instances: 2000
+      ram: 5120000
+      cores:  8000
+      volumes: 5000
+      gigabytes: 500000
+      port: 8000
+      floatingip: 100
+      network: 100
+      subnet: 1000
+      router: 10
+      security_group: 100
+      security_group_rule: 1000
+    register: quota_result
+    until: '"code" not in quota_result.keys()'
+    retries: 5
+    delay: 10
+  
+  - name: init flavor
+    os_nova_flavor:
+      cloud: admin_cloud
+      state: present
+      name: "{{ item.name }}"
+      flavorid: auto
+      ram: "{{ item.ram }}"
+      disk: "{{ item.disk }}"
+      vcpus: "{{ item.vcpus }}"
+    with_items:
+      - { name: TaskType, ram: 1024, disk: 20, vcpus: 1 }
+      - { name: KnowledgeType, ram: 2048, disk: 20, vcpus: 2 }
+      - { name: PowerType, ram: 3072, disk: 20, vcpus: 4 }
+  
+  - name: create security group
+    os_security_group: cloud=admin_cloud name=open description="allow ping and ssh"
+  
+  - name: add rule to security group
+    os_security_group_rule:
+      cloud: admin_cloud
+      security_group: open
+      protocol: "{{ item.protocol }}"
+      port_range_min: "{{ item.port_min }}"
+      port_range_max: "{{ item.port_max }}"
+      remote_ip_prefix: "{{ item.ip_seg }}"
+    with_items:
+      - { protocol: icmp, port_min: -1, port_max: -1, ip_seg: 0.0.0.0/0 }
+      - { protocol: tcp, port_min: 22, port_max: 22, ip_seg: 0.0.0.0/0 }
+      - { protocol: tcp, port_min: 3389, port_max: 3389, ip_seg: 0.0.0.0/0 }
+      - { protocol: tcp, port_min: 5000, port_max: 5000, ip_seg: 0.0.0.0/0 }
+      - { protocol: tcp, port_min: 40000, port_max: 40100, ip_seg: 0.0.0.0/0 }
+    
+  run_once: true
+  delegate_to: "{{ master_node }}"

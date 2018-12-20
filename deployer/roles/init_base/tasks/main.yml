@@ -1,0 +1,12 @@
+---
+# tasks file for init_base
+
+- include: config_yum.yml
+
+- include: system_basic.yml
+
+- include: pip.yml
+  when: '"controller" in my_role or "compute" in my_role'
+
+- include: openstack_basic.yml
+  when: '"neutron" in my_role or "compute" in my_role'

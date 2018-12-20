@@ -1,0 +1,18 @@
+---
+
+- name: del old repos
+  file: path=/etc/yum.repos.d state=absent
+
+- name: ensure repo dir exist
+  file: path=/etc/yum.repos.d/ state=directory
+
+- name: copy repo to remote
+  copy: src=my.repo dest=/etc/yum.repos.d/my.repo
+
+- name: clean yum cache
+  command: "yum clean all"
+
+- name: clean up transaction
+  command: "yum-complete-transaction --cleanup-only"
+  ignore_errors: true
+

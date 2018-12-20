@@ -1,0 +1,19 @@
+---
+# tasks file for docker
+
+- name: copy docker-py packages to remote
+  copy: src=docker-python dest=/tmp/
+
+- name: reinstall requests
+  shell: pip uninstall -y requests; pip install --user /tmp/docker-python/requests*
+
+- name: install docker-python
+  shell: pip install --user /tmp/docker-python/*
+
+- name: install docker-ce via yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - docker-ce
+
+- name: enable and start docker-ce
+  service: name=docker state=started enabled=yes

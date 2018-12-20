@@ -1,0 +1,52 @@
+##############
+controller_vhostname_short:     "controllervhostname"
+controller_vhostname:           "{{ controller_vhostname_short }}.{{ domain }}"
+deploy_hostname:                "deployer"
+
+controller_hostname_list:       "{{ controllers|selectattr('mg_ip')|map(attribute='hostname')|list }}"
+controller_hostname_list_str:   "{% for i in  controller_hostname_list %}{{ i }}.{{domain}}{% if not loop.last %},{% endif %}{% endfor %}"
+controller_mg_ip_list:          "{{ controllers|selectattr('hostname')|map(attribute='mg_ip')|list }}"
+controller_cluster_ip_list:     "{{ controllers|selectattr('hostname')|map(attribute='cluster_ip')|list }}"
+controller_len:                 "{{ controllers|length }}"
+
+compute_hostname_list:          "{{ computes|selectattr('mg_ip')|map(attribute='hostname')|list }}"
+compute_mg_ip_list:             "{{ computes|selectattr('hostname')|map(attribute='mg_ip')|list }}"
+
+openstack_rabbitmq_password:    '{{ default_password }}'
+
+mysql_cluster_name:             'mysql_cluster'
+wsrep_sst_username:             'mycluster'
+wsrep_sst_password:             '111111'
+mysql_root_password:            '{{ default_password }}'
+hacluster_pass:                 'hacluster'
+port_mysql:                     '3306'
+
+nova_password:                  "nova"
+
+os_token:                       '055136e0cdd58f6bdd37' #generate automatically
+mysql_keystone_password:        '{{ default_password }}'
+
+openstack_admin_password:            '11111111'
+openstack_nova_password:             '{{ default_password }}'
+openstack_glance_password:           '{{ default_password }}'
+openstack_cinder_password:           '{{ default_password }}'
+openstack_neutron_password:          '{{ default_password }}'
+openstack_placement_password:        '{{ default_password }}'
+openstack_apiadmin_password:         '{{ default_password }}'
+
+metadata_proxy_shared_secret:   '{{ default_password }}'
+region_name:                    'RegionOne'
+
+mysql_zabbix_user:              'zabbixsrv'
+mysql_zabbix_password:          '{{ default_password }}'
+
+mysql_cmp_user:                 'cmp'
+mysql_cmp_password:             '{{ default_password }}'
+
+mysql_lbs_user:                 'lbs'
+mysql_lbs_password:             '{{ default_password }}'
+
+ceph_user:                      "ceph"
+cephfile_path:                  "/tmp/ceph"
+
+version:                        "V4.2.0-RC11/20181121"

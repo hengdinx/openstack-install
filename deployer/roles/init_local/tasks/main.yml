@@ -1,0 +1,5 @@
+---
+# tasks file for init_local
+
+- include: ssh_auth.yml
+- include: system_basic.yml

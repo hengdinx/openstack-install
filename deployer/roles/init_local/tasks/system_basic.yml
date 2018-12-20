@@ -1,0 +1,18 @@
+---
+
+#- name: render /etc/hosts
+#  template: src=hosts.j2 dest=/etc/hosts
+
+- block:
+  - name: remove /etc/httpd/conf.d/wsgi-keystone.conf
+    file: path=/etc/httpd/conf.d/wsgi-keystone.conf state=absent
+
+  - name: start httpd service
+    service: name=httpd state=started enabled=yes
+  when: 'action_type == "install" or action_type == "init"'
+
+- name: render /etc/hosts
+  template: src=hosts.j2 dest=/etc/hosts
+
+- name: set hostname for nodes
+  command: "hostnamectl set-hostname {% if hostname is defined %}{{ hostname }}.{{ domain }}{% else %}{{ deploy_hostname }}{% endif %}"

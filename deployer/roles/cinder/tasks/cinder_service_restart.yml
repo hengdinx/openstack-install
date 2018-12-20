@@ -1,0 +1,8 @@
+---
+
+- name: restart cinder services
+  service: name={{ item }} state=restarted enabled=yes
+  with_items:
+    - openstack-cinder-api
+    - openstack-cinder-scheduler
+

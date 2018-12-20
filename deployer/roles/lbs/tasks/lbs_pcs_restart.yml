@@ -1,0 +1,25 @@
+---
+
+- name: delete lbs resource
+  shell: pcs resource delete lbs
+  register: result
+  failed_when: 'result.rc !=0 and "not exist" not in result.stderr'
+
+- name: create lbs resource
+  shell: pcs resource create lbs systemd:lbs
+
+- name: set order for lbs
+  shell: pcs constraint order start vip then lbs kind=Optional
+
+- name: set colocation for lbs
+  shell: pcs constraint colocation add lbs with vip
+
+- name: wait until lbs resource start
+  shell: 'pcs status |grep lbs'
+  register: result
+  retries: 10
+  delay: 10
+  until: '"Started" in result.stdout'
+
+- name: disable lbs resource
+  shell: pcs resource disable lbs

@@ -1,0 +1,11 @@
+[Unit]
+Description=mount mygfs
+After=network.target glusterd.service glusterfsd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/gfsmount
+
+[Install]
+WantedBy=multi-user.target

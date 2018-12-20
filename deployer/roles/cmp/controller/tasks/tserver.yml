@@ -1,0 +1,66 @@
+---
+
+- block:
+  - name: cleanup tserver resource
+    shell: 'pcs resource delete {{ item }}'
+    register: result
+    failed_when: result.rc != 0 and "does not exist" not in result.stderr
+    with_items:
+      - tserver
+      - otc-ip
+      - html5mmr_ws_server
+      - vdibroker
+      - zero_evacuate
+
+  - name: create tserver resource
+    shell: 'pcs resource create {{ item.name }} systemd:{{ item.service }} op start interval="0" timeout="300s" op stop interval="0" timeout="300s"'
+    with_items:
+      - { name: tserver, service: Tserver }
+      - { name: otc-ip, service: otc-ip }
+      - { name: html5mmr_ws_server, service: html5mmr-ws-server }
+      - { name: zero_evacuate, service: zero_evacuate }
+
+  - name: create vdibroker resource
+    shell: 'pcs resource create vdibroker systemd:vdibroker --clone interleave=true'
+
+  - name: set order for tserver resources
+    shell: 'pcs constraint order start vip then {{ item }} kind=Optional'
+    with_items:
+      - tserver
+      - otc-ip
+      - html5mmr_ws_server
+      - zero_evacuate
+    
+  - name: set colocation for tserver resources
+    shell: 'pcs constraint colocation add {{ item }} with vip'
+    with_items:
+      - tserver
+      - otc-ip
+      - html5mmr_ws_server
+      - zero_evacuate
+
+  - name: wait until tserver resource start
+    shell: 'pcs status |grep {{ item }}'
+    register: result
+    retries: 10
+    delay: 10
+    until: '"Started" in result.stdout'
+    with_items:
+      - tserver
+      - otc-ip
+      - html5mmr_ws_server
+      - zero_evacuate
+
+  - name: wait until vdibroker start
+    shell: 'pcs status |grep -A 1 vdibroker'
+    register: result
+    retries: 10
+    delay: 10
+    until: '"Started" in result.stdout'
+
+  - name: disable zero_evacuate resource
+    shell: pcs resource disable zero_evacuate
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+

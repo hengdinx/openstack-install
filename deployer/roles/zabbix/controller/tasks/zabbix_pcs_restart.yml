@@ -1,0 +1,23 @@
+---
+
+- name: cleanup zabbix resource
+  shell: 'pcs resource delete zabbix'
+  register: result
+  failed_when: result.rc != 0 and "does not exist" not in result.stderr
+
+- name: create zabbix resource
+  shell: 'pcs resource create zabbix systemd:zabbix-server op start interval="0" timeout="300s" op stop interval="0" timeout="300s"'
+
+- name: set order
+  shell: 'pcs constraint order start vip then zabbix kind=Optional'
+
+- name: set colocation
+  shell: pcs constraint colocation add zabbix with vip
+
+- name: wait until zabbix resource start
+  shell: 'pcs status |grep zabbix'
+  register: result
+  retries: 10
+  delay: 10
+  until: '"Started" in result.stdout'
+

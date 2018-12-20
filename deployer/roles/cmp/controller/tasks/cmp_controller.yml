@@ -1,0 +1,140 @@
+---
+# tasks file for cmp
+
+- name: install rpms
+  yum: name={{ item }} state=latest
+  with_items:
+    - Django
+    - python-heatclient
+    - python2-django-openstack-auth
+    - python-django-horizon
+    - python-xlwt
+    - python2-iptables
+    - python-processing
+    - python2-jpype
+    - Tserver
+    - otc-ip-server
+    - html5mmr-websocket-server
+    - license-client-libs
+    - zero-license
+    - java-1.7.0-openjdk-headless
+    - vdibroker
+    - mp-utils
+    - mp
+    - openstack-dashboard
+
+- block:
+  - name: cleanup cmp databses
+    mysql_db:
+      login_host: "{{ vip }}"
+      login_user: root
+      login_password: "{{ mysql_root_password }}"
+      name: cmp
+      state: absent
+
+  - name: delete cmp db user
+    mysql_user: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=cmp state=absent
+
+  - name: delete cmp db
+    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=cmp state=absent
+
+  - name: import sql files
+    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=all state=import target={{ item }}
+    with_items:
+      - /opt/zero/otc_config_conf/cmp.sql
+      - /opt/zero/otc_config_conf/otc.sql
+
+  - name: create cmp user
+    mysql_user:
+      login_password: "{{ mysql_root_password }}"
+      login_user: root
+      login_host: "{{ vip }}"
+      name: "{{ mysql_cmp_user }}"
+      host: "{{ item }}"
+      priv: "cmp.*:ALL,GRANT"
+      password: "{{ mysql_cmp_password }}"
+    with_items:
+      - "%"
+      - 127.0.0.1
+      - ::1
+      - "localhost"
+
+  - name: create dirs
+    file: path={{ item }} state=directory owner=apache group=apache
+    with_items:
+      - /var/lib/zero/OTC/conf
+      - /var/lib/zero/OTC/download
+      - /var/lib/zero/OTC/fingerprints
+      - /var/lib/zero/OTC/update_full
+      - /var/lib/zero/OTC/update_increment
+      - /var/lib/zero/OTC/vmsoft
+      - /var/lib/zero/OTC/etc
+      - /var/lib/zero/OTC/ISO
+      - /var/lib/zero/OTC/images
+
+  - name: copy OTC conf to remote
+    copy: src=conf/ dest=/var/lib/zero/OTC/conf/
+   
+  - name: copy /opt/zero/templates/download/ to /var/lib/zero/OTC/download
+    shell: cp /opt/zero/templates/download/* /var/lib/zero/OTC/download/ 
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: mkdir /var/lib/zero/ipaddress_conf
+  file: path=/var/lib/zero/ipaddress_conf state=directory
+
+- name: render server_ipaddress/local_settings
+  template: src={{ item.src }} dest={{ item.dest }} mode=0755 owner=apache group=apache
+  with_items:
+    - { src: server_ipaddress.j2, dest: /var/lib/zero/ipaddress_conf/server_ipaddress }
+    - { src: local_settings.j2, dest: /etc/openstack-dashboard/local_settings }
+    - { src: admin-openrc.sh.j2, dest: /opt/zero/admin-openrc.sh}
+    - { src: mp.conf.j2, dest: /etc/httpd/conf.d/mp.conf }
+
+- name: modify /etc/httpd/conf.d/openstack-dashboard.conf
+  lineinfile: path=/etc/httpd/conf.d/openstack-dashboard.conf line="WSGIApplicationGroup %{GLOBAL}"
+
+- name: modify /etc/init.d/vdibroker
+  lineinfile:
+    path: /etc/init.d/vdibroker
+    regexp: "^vdibrokerip.*$"
+    line: "vdibrokerip=\"{{ cluster_ip }}\""
+    backrefs: yes
+
+- name: copy zero_evacuate.service to /usr/lib/systemd/system/
+  copy: src=/opt/zero/otc_service/zero_evacuate.service dest=/usr/lib/systemd/system/ remote_src=yes
+
+- name: add exe privileges to /opt/zero/otc_hostevacuate/zero_evacuate.pyc
+  shell: "chmod a+x {{ item }}"
+  with_items:
+    - /opt/zero/*.sh
+    - /opt/zero/otc_hostevacuate/zero_evacuate.pyc
+    - /opt/zero/base_sh/*.sh
+
+- name: modify owner/group of shell scripts in /opt/zero/
+  shell: "chown apache:apache {{ item }}"
+  with_items:
+    - /opt/zero/*.sh
+    - /opt/zero/base_sh/*.sh
+
+- name: get sectime
+  shell: date +%s|openssl base64
+  register: sectime
+
+- name: modify sectime
+  shell: sed -i s/installtime/{{ sectime.stdout }}/g /opt/zero/config/.install
+
+- name: modify file group/owner
+  file: path=/var/lib/zero/OTC state=directory owner=apache group=apache recurse=yes
+
+- name: copy auth_kind to remote
+  copy: src=auth_kind dest=/opt/auth_kind owner=apache group=apache
+
+- name: copy zero_status.conf
+  copy: src=zero_status.conf dest=/etc/zero_status.conf
+
+- name: chmod u+s /usr/sbin/biosdevname
+  file: path=/usr/sbin/biosdevname mode="u+s"
+

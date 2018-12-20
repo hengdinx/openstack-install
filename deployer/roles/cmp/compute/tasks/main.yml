@@ -1,0 +1,16 @@
+---
+# tasks file for cmp
+
+- name: install mp-utils
+  yum: name=mp-utils state=latest
+
+- name: create dirs
+  file: path={{ item }} state=directory owner=apache group=apache
+  with_items:
+    - /var/lib/zero/OTC/
+
+- name: render server_ipaddress/local_settings
+  template: src={{ item.src }} dest={{ item.dest }} mode=0755 owner=apache group=apache
+  with_items:
+    - { src: admin-openrc.sh.j2, dest: /opt/zero/admin-openrc.sh}
+

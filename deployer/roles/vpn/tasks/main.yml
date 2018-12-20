@@ -1,0 +1,102 @@
+---
+# tasks file for vpn
+
+- name: ensure /var/lib/docker/containers/openvpn-server/ exists
+  file: path=/var/lib/docker/containers/openvpn-server/ state=directory
+
+- name: ensure /var/lib/docker/containers/openvpn-server/openvpn.log exists
+  file: path=/var/lib/docker/containers/openvpn-server/openvpn.log state=touch
+
+- name: copy files to /var/lib/docker/containers/openvpn-server/
+  copy: src={{ item }} dest=/var/lib/docker/containers/openvpn-server/{{ item }}
+  with_items:
+    - psw-file
+
+- name: render server.conf
+  template: src=server.conf.j2 dest=/var/lib/docker/containers/openvpn-server/server.conf
+
+- name: add ip rule in /etc/rc.d/rc.local
+  lineinfile:
+    path: /etc/rc.d/rc.local
+    line: "ip rule add from {{ vpn_ip_seg }}/20 table 10"
+    mode: 0755
+
+- name: cleanup ip rule
+  shell: "ip rule del from {{ vpn_ip_seg }}/20 table 10"
+  register: result
+  failed_when: result.rc != 0 and result.rc != 254 and result.rc != 2
+
+- name: add ip rule for vpn
+  shell: "ip rule add from {{ vpn_ip_seg }}/20 table 10"
+
+- name: copy docker files to remote
+  copy: src={{ item.src }} dest={{ item.dest }}
+  with_items:
+    - {src: openvpn-server2.4.6, dest: /tmp/ }
+    - {src: vpns-1.0.0.tar.gz, dest: /tmp/ }
+    - {src: vpns.service, dest: /usr/lib/systemd/system/ }
+
+- name: unzi vpns-1.0.0.tar.gz to /opt
+  shell: tar -zxf /tmp/vpns-1.0.0.tar.gz -C /opt/
+
+- name: copy vpn.conf
+  template: src={{ item.src }} dest={{ item.dest }}
+  with_items:
+    - {src: vpns.conf.j2, dest: /opt/vpns/conf/vpns.conf }
+
+- name: config sysctl.conf
+  sysctl: name=net.ipv4.ip_forward value=1
+
+- name: cleanup old containers
+  docker_container:
+    name: openvpn-server
+    state: absent
+
+- name: cleanup old images
+  docker_image:
+    tls_hostname: controller1
+    name: myimage/openvpn-server2.4.6
+    tag: 201807101649 
+    state: absent
+
+- name: load docker image
+  docker_image:
+    name: myimage/openvpn-server2.4.6
+    tag: 201807101649 
+    timeout: 600
+    #push: yes
+    load_path: /tmp/openvpn-server2.4.6
+
+- name: start docker container
+  docker_container:
+    name: openvpn-server
+    restart_policy: always
+    interactive: yes
+    tty: yes
+    detach: yes
+    image: myimage/openvpn-server2.4.6:201807101649
+    command: "/usr/sbin/openvpn --cd /etc/openvpn/server --config server.conf"
+    network_mode: host
+    privileged : yes
+    volumes:
+      - /var/lib/docker/containers/openvpn-server/server.conf:/etc/openvpn/server/server.conf
+      - /var/lib/docker/containers/openvpn-server/openvpn.log:/var/log/openvpn.log
+      - /var/lib/docker/containers/openvpn-server/psw-file:/etc/openvpn/server/psw-file
+
+- block:
+  - name: create db for vpn
+    mysql_db: name=vpns login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+
+  - name: init database for vpn
+    shell: python /opt/vpns/models.py
+
+  - include: vpn_pcs_restart.yml
+    when: ha_enabled == True
+
+  - include: vpn_service_restart.yml
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+

@@ -1,0 +1,31 @@
+port 1194
+proto udp
+dev tun
+ca /etc/openvpn/easy-rsa/3.0/pki/ca.crt
+cert /etc/openvpn/easy-rsa/3.0/pki/issued/openvpn-server.crt
+key /etc/openvpn/easy-rsa/3.0/pki/private/openvpn-server.key
+dh /etc/openvpn/easy-rsa/3.0/pki/dh.pem
+tls-auth /etc/openvpn/ta.key 0
+script-security 3
+auth-user-pass-verify /etc/openvpn/server/checkpsw.sh via-env
+server  {{ vpn_ip_seg }} 255.255.240.0
+ifconfig-pool-persist ipp.txt
+#push "redirect-gateway def1 bypass-dhcp"
+#push "dhcp-option DNS 223.5.5.5"
+#push "dhcp-option DNS 114.114.114.114"
+keepalive 10 120
+cipher AES-256-CBC
+comp-lzo
+max-clients 500
+user openvpn
+group openvpn
+persist-key
+persist-tun
+status /var/log/openvpn-status.log
+log-append  /var/log/openvpn.log
+txqueuelen 1000
+verb 3
+mute 20
+askpass server.pass
+duplicate-cn
+client-to-client

@@ -1,0 +1,26 @@
+---
+
+- name: modify /etc/haproxy/haproxy.cfg
+  blockinfile:
+    path: /etc/haproxy/haproxy.cfg
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR GLANCE"
+    block: |
+      listen glance_api_cluster
+          bind {{ controller_vhostname }}:9292
+          balance  source
+          option  tcpka
+          option  httpchk
+          option  tcplog
+          {% for i in controllers %}
+          server {{ i['hostname'] }} {{ i['cluster_ip'] }}:9292 check inter 2000 rise 2 fall 5
+          {% endfor %}
+
+      listen glance_registry_cluster
+          bind {{ controller_vhostname }}:9191
+          balance  source
+          option  tcpka
+          option  tcplog
+          {% for i in controllers %}
+          server {{ i['hostname'] }} {{ i['cluster_ip'] }}:9191 check inter 2000 rise 2 fall 5
+          {% endfor %}
+

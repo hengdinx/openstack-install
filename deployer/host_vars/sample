@@ -1,0 +1,32 @@
+##############################################################################
+ntp_server:             "cn.ntp.org.cn"
+hostname:               "controller1"
+vpn_ip_seg:             "169.255.0.0"
+my_role:
+  - "controller"
+  - "neutron"
+######################   network config  #####################################
+mg_ip:                  "10.10.40.11"
+mg_netmask:             "255.255.255.0"
+mg_card:                "eth0"
+
+sto_internal_ip:                 ""
+sto_internal_netmask:            ""
+sto_internal_card:               ""
+
+sto_ip:                 "{{ mg_ip }}"
+sto_netmask:            "{{ mg_netmask }}"
+sto_card:               "{{ mg_card }}"
+
+ceph_ip:                ""
+ceph_netmask:           ""
+ceph_card:              ""
+
+ext_ip:                 ""
+ext_netmask:            ""
+ext_card:               ""
+
+cluster_ip:             "{{ mg_ip }}"
+cluster_netmask:        "{{ mg_netmask }}"
+cluster_card:           "{{ mg_card }}"
+

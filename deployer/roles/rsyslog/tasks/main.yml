@@ -1,0 +1,21 @@
+---
+# tasks file for rsyslog
+
+- name: create /var/log/zero_sys.log
+  file: path=/var/log/zero_sys.log state=touch mode=0600
+
+- name: modify /etc/rsyslog.conf
+  blockinfile:
+    path: /etc/rsyslog.conf
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR RSYSLOG"
+    block: |
+      $ModLoad imudp
+      $UDPServerRun 514
+      $template IpTemplate,"/var/log/zero_sys.log"
+      if $msg contains "audittype=" then{
+      *.*     ?IpTemplate
+      & ~
+      }
+
+- name: restart rsyslog service
+  service: name=rsyslog state=restarted enabled=yes

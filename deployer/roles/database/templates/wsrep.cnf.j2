@@ -1,0 +1,46 @@
+##############
+[mysqld]
+character-set-server = utf8
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+user=mysql
+bind-address=0.0.0.0
+skip-name-resolve
+default-storage-engine=innodb
+max_connections=10000
+binlog_format=ROW
+innodb_autoinc_lock_mode=2
+innodb_flush_log_at_trx_commit=2
+innodb_buffer_pool_size = 256M
+innodb_flush_log_at_trx_commit=0
+
+############
+[galera]
+wsrep_on=ON
+wsrep_sync_wait=1
+wsrep_provider=/usr/lib64/galera/libgalera_smm.so
+wsrep_provider_options='pc.recovery=TRUE;gcache.size=300M'
+wsrep_cluster_name={{ mysql_cluster_name }}
+wsrep_cluster_address='gcomm://{% for i in controllers %}{%if not loop.last%}{{ i["hostname"] }},{% else %}{{ i["hostname"] }}{% endif %}{% endfor %}'
+wsrep_node_name={{ hostname }}
+wsrep_node_address={{ cluster_ip }}
+wsrep_sst_method=rsync
+wsrep_sst_auth={{ wsrep_sst_username }}:{{ wsrep_sst_password }}
+wsrep_slave_threads=1
+wsrep_certify_nonPK=1
+wsrep_max_ws_rows=131072
+wsrep_max_ws_size=1073741824
+wsrep_debug=1
+wsrep_convert_LOCK_to_trx=0
+wsrep_retry_autocommit=1
+wsrep_auto_increment_control=1
+wsrep_drupal_282555_workaround=0
+wsrep_causal_reads=0
+innodb_locks_unsafe_for_binlog=1
+query_cache_size=0
+query_cache_type=0
+innodb_file_per_table
+collation-server = utf8_general_ci
+init-connect = 'SET NAMES utf8'
+open_files_limit=10000
+

@@ -1,0 +1,47 @@
+---
+# tasks file for rabbitmq
+
+- name: cleanup rabbitmq-server service
+  yum: name={{ item }} state=absent
+  with_items:
+    - rabbitmq-server
+
+- name: install rabbitmq
+  yum: name={{ item }} state=latest
+  with_items:
+    - rabbitmq-server
+
+- name: copy /etc/security/limits.d/20-nproc.conf
+  copy: src=20-nproc.conf dest=/etc/security/limits.d/20-nproc.conf
+
+- name: set ulimit
+  shell: "ulimit -n 65535"
+
+- name: modify rabbitmq service file
+  ini_file:
+    path: /usr/lib/systemd/system/rabbitmq-server.service
+    section: Service
+    option: LimitNOFILE
+    value: 20000
+    mode: 0644
+    backup: yes
+
+- name: add delay for rabbitmq service
+  ini_file:
+    path: /usr/lib/systemd/system/rabbitmq-server.service
+    section: Service
+    option: ExecStartPre
+    value: "/bin/sleep 30"
+
+- name: start first rabbitmq-server service
+  systemd: state=restarted daemon_reload=yes name=rabbitmq-server enabled=yes
+
+- name: add openstack user
+  rabbitmq_user:
+    name: openstack
+    password: "{{ openstack_rabbitmq_password }}"
+    configure_priv: .*
+    read_priv: .*
+    write_priv: .*
+    tags: administrator
+    state: present

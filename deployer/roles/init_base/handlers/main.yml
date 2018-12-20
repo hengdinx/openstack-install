@@ -1,0 +1,5 @@
+---
+# handlers file for init_base
+
+- name: restart iptables
+  service: name=iptables state=restarted enabled=yes

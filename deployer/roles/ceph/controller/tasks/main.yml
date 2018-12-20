@@ -1,0 +1,40 @@
+---
+# tasks file for ceph
+
+- block:
+  #- name: install ceph
+  #  yum: name={{ item }} state=latest
+  #  with_items:
+  #    - ceph-common
+  #    - python-cephfs
+  #    - libcephfs1
+  #    - ceph-fuse
+  
+  - name: create /etc/ceph and /opt/zero/ceph dir
+    file: path={{ item }} state=directory
+    with_items:
+      - /etc/ceph/
+      - /opt/zero/ceph
+  
+  - name: upload ceph files
+    copy: src={{ item.src }} dest={{ item.dest }} owner={{ item.owner|default("root") }} group={{ item.group|default("root") }} mode={{ item.mode|default("0644") }}
+    with_items:
+      - { src: "{{ cephfile_path }}/ceph.conf", dest: /etc/ceph/ }
+      - { src: "{{ cephfile_path }}/client.ceph.keyring", dest: /etc/ceph/ }
+      - { src: "{{ cephfile_path }}/ceph.client.admin.keyring", dest: /etc/ceph/ }
+  
+  - name: render /etc/ceph/secret.xml
+    template: src=secret.xml.j2 dest=/etc/ceph/secret.xml
+  
+  - name: modify /etc/ceph/ceph.conf
+    ini_file:
+      path: /etc/ceph/ceph.conf
+      section: "{{ item.section }}"
+      option: "{{ item.option }}"
+      value: '{{ item.value }}'
+    with_items:
+      - { section: client.ceph, option: keyring, value: /etc/ceph/client.ceph.keyring }
+      
+  - include: ceph_controller.yml
+    when: hostname in controller_hostname_list
+  when: '"ceph" in nova_storage_type'

@@ -1,0 +1,37 @@
+---
+
+- name: modify /etc/haproxy/haproxy.cfg
+  blockinfile:
+    path: /etc/haproxy/haproxy.cfg
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR NOVA"
+    block: |
+      listen nova_placement_api
+        bind {{ controller_vhostname }}:8778
+        balance  source
+        #option  tcpka
+        #option  httpchk
+        #option  tcplog
+        http-request del-header X-Forwarded-Proto
+        {% for i in controllers %}
+        server {{ i['hostname'] }} {{ i['cluster_ip'] }}:8778 check inter 2000 rise 2 fall 5
+        {% endfor %}
+
+      listen nova_compute_api_cluster
+          bind {{ controller_vhostname }}:8774
+          balance  source
+          option  tcpka
+          option  httpchk
+          option  tcplog
+        {% for i in controllers %}
+        server {{ i['hostname'] }} {{ i['cluster_ip'] }}:8774 check inter 2000 rise 2 fall 5
+        {% endfor %}
+
+      listen nova_metadata_api_cluster
+          bind {{ controller_vhostname }}:8775
+          balance  source
+          option  tcpka
+          option  tcplog
+        {% for i in controllers %}
+        server {{ i['hostname'] }} {{ i['cluster_ip'] }}:8775 check inter 2000 rise 2 fall 5
+        {% endfor %}
+

@@ -1,0 +1,55 @@
+# aio
+- hosts: localhost
+  gather_facts: False
+  roles:
+    - init_local
+  vars_files:
+    - default.yml
+
+- hosts: controller
+  gather_facts: False
+  roles:
+    - system_controller
+    - gfs
+    - single/database
+    - single/rabbitmq
+    - memcached
+    - keystone
+    - nova/controller
+    - glance
+    - neutron/controller
+    - cinder
+    - consul
+    - quota
+    - zabbix/controller
+    - cmp/controller
+    - lbs
+    - docker
+    - vpn
+    - ceph/controller
+    - version
+  vars_files:
+    - default.yml
+    - keys.yml
+
+- hosts: compute
+  gather_facts: False
+  roles:
+    - nova/compute
+    - neutron/compute
+    - consul
+    - zabbix/compute
+    - cmp/compute
+    - lbc
+    - ceph/compute
+    - version
+  vars_files:
+    - default.yml
+    - keys.yml
+
+- hosts: controller
+  gather_facts: False
+  roles:
+    - zabbix_init
+  vars_files:
+    - default.yml

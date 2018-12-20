@@ -1,0 +1,26 @@
+---
+
+- block:
+  - name: cleanup consul-sto resource
+    shell: pcs resource delete consul-sto
+    register: consul_status
+    failed_when: consul_status.rc !=0 and "not exist" not in consul_status.stderr
+  
+  - name: create consul-sto resource
+    shell:  pcs resource create {{ item }} systemd:{{ item }} --clone interleave=true op monitor interval="10s" timeout="30s" on-fail="restart" op start interval="0" timeout="300s" op stop interval="0" timeout="300s"
+    with_items:
+      - consul-sto
+  
+  - name: wait until consul-sto start
+    shell: 'pcs status|grep -A 1 {{ item }}'
+    register: result
+    retries: 5
+    delay: 10
+    until: '"Started" in result.stdout'
+    with_items:
+      - consul-sto
+  
+  - name: restart haproxy resource
+    shell: pcs resource restart haproxy
+
+  when: ha_enabled == True

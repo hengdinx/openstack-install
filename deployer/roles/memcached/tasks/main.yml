@@ -1,0 +1,15 @@
+---
+# tasks file for memcached
+
+- name: install memcached
+  yum: name={{ item }} state=latest
+  with_items:
+    - memcached
+    - python-memcached
+
+- name: render config file
+  template: src=memcached.j2 dest=/etc/sysconfig/memcached
+
+- name: restart memcached
+  service: name=memcached state=restarted enabled=yes
+

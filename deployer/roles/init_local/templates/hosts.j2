@@ -1,0 +1,28 @@
+127.0.0.1       localhost.localdomain localhost
+::1     localhost6.localdomain6 localhost6
+
+{% if deploy_ip_mg not in controller_mg_ip_list and deploy_ip_mg not in compute_mg_ip_list %}
+{{ deploy_ip_mg }} {{ deploy_hostname }}
+{% endif %}
+{% for i in controllers %}
+{% if i['mg_ip'] != deploy_ip_mg %}
+{{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
+{% elif i['mg_ip'] == deploy_ip_mg and i['mg_ip'] == i['cluster_ip'] %}
+{{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }} {{ deploy_hostname }}
+{% elif i['mg_ip'] == deploy_ip_mg and i['mg_ip'] != i['cluster_ip'] %}
+{{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
+{{ i['mg_ip'] }} {{ deploy_hostname }}
+{% endif %}
+{% endfor %}
+{% for i in computes %}
+{% if i['hostname'] not in controller_hostname_list %}
+{{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
+{% endif %}
+{% endfor %}
+{% for i in ceph_nodes %}
+{% if i['hostname'] not in controller_hostname_list and i['hostname'] not in compute_hostname_list %}
+{% if i['cluster_ip'] != None and i['cluster_ip'] != "" %}{{ i['cluster_ip'] }}{% elif i['sto_ip'] != None and i['sto_ip'] != "" %}{{ i['sto_ip'] }}{% endif %} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
+{% endif %}
+{% endfor %}
+{{ vip }} {{ controller_vhostname }} {{ controller_vhostname_short }}
+

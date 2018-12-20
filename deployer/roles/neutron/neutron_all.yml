@@ -1,0 +1,70 @@
+---
+# tasks file for neutron
+
+- name: config /etc/neutron/neutron.conf 
+  ini_file:
+    path: /etc/neutron/neutron.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: auth_strategy, value: keystone }
+    - { section: DEFAULT, option: rpc_backend, value: rabbit }
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: keystone_authtoken, option: auth_uri, value: "http://{{ controller_vhostname }}:5000" }
+    - { section: keystone_authtoken, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: keystone_authtoken, option: memcached_servers, value: "{{ controller_vhostname }}:11211" }
+    - { section: keystone_authtoken, option: auth_type, value: password }
+    - { section: keystone_authtoken, option: project_domain_name, value: default }
+    - { section: keystone_authtoken, option: user_domain_name, value: default }
+    - { section: keystone_authtoken, option: project_name, value: service }
+    - { section: keystone_authtoken, option: username, value: neutron }
+    - { section: keystone_authtoken, option: password, value: "{{ openstack_neutron_password }}" }
+    - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/neutron" }
+    - { section: oslo_messaging_rabbit, option: rabbit_ha_queues, value: true }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_interval, value: 1 }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_backoff, value: 2 }
+    - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 0 }
+    - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 30 }
+    - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+    - { section: oslo_messaging_rabbit, option: rabbit_userid, value: openstack }
+    - { section: oslo_messaging_rabbit, option: rabbit_password, value: "{{ openstack_rabbitmq_password}}" }
+
+- name: config /etc/neutron/plugins/ml2/openvswitch_agent.ini 
+  ini_file:
+    path: /etc/neutron/plugins/ml2/openvswitch_agent.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: securitygroup, option: enable_security_group, value: True }
+    - { section: securitygroup, option: enable_ipset, value: True }
+    - { section: securitygroup, option: firewall_driver, value: neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver }
+    - { section: agent, option: tunnel_types, value: vxlan }
+    - { section: agent, option: l2_population, value: True }
+    - { section: agent, option: prevent_arp_spoofing, value: True }
+    - { section: agent, option: arp_responder, value: True }
+    - { section: ovs, option: bridge_mappings, value: "{% if ext_card == '' or ext_card == None %}provider:br-eth1{% elif ext_card != '' and ext_card != None %}default:br-ex,provider:br-eth1{% endif %}" }
+    - { section: ovs, option: local_ip, value: "{{ cluster_ip }}" }
+
+- name: config /etc/neutron/l3_agent.ini
+  ini_file:
+    path: /etc/neutron/l3_agent.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: interface_driver, value: neutron.agent.linux.interface.OVSInterfaceDriver }
+
+- name: config /etc/neutron/metadata_agent.ini
+  ini_file:
+    path: /etc/neutron/metadata_agent.ini
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: nova_metadata_ip, value: "{{ controller_vhostname }}" }
+    - { section: DEFAULT, option: metadata_proxy_shared_secret, value: "{{ metadata_proxy_shared_secret }}" }
+
+- name: link /etc/neutron/plugins/ml2/ml2_conf.ini
+  file: state=link src=/etc/neutron/plugins/ml2/ml2_conf.ini dest=/etc/neutron/plugin.ini force=yes

@@ -1,0 +1,11 @@
+---
+# tasks file for zabbix_init
+
+- name: run /var/lib/zabbix/ipmi_set.py
+  shell: "python /var/lib/zabbix/ipmi_set.py --node {% for i in controllers %}'{\"hostname\":\"{{ i['hostname'] }}.{{ domain }}\",\"cluster_ip\":\"{{ i['cluster_ip'] }}\"}' {% endfor %} {% for i in computes %}{% if i['cluster_ip'] not in controller_cluster_ip_list %}'{\"hostname\":\"{{ i['hostname'] }}.{{ domain }}\",\"cluster_ip\":\"{{ i['cluster_ip'] }}\"}' {% endif %}{% endfor %}"
+  register: result_insert
+  until: '"no existed" not in result_insert.stdout'
+  retries: 10
+  delay: 30
+  run_once: true
+  delegate_to: "{{ master_node }}"

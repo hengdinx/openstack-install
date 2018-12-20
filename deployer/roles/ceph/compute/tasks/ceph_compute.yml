@@ -1,0 +1,40 @@
+---
+
+- name: config nova.conf for ceph
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: libvirt, option: images_rbd_pool, value: nova }
+    - { section: libvirt, option: images_type, value: rbd }
+    - { section: libvirt, option: images_rbd_ceph_conf, value: /etc/ceph/ceph.conf }
+    - { section: libvirt, option: live_migration_flag, value: "VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST" }
+    - { section: libvirt, option: rbd_user, value: "{{ ceph_user }}" }
+    - { section: libvirt, option: rbd_secret_uuid, value: "{{ ceph_uuid }}" }
+    - { section: libvirt, option: disk_cachemodes, value: "network=writeback" }
+
+- name: config nova.conf for ceph
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: libvirt, option: images_rbd_pool, value: "nova_{{ hostname }}"}
+  when: 'sto_ip == None or sto_ip == ""'
+
+- name: undefine secret
+  shell: "virsh secret-list|grep secret|awk '{print $1}'|xargs virsh secret-undefine"
+  register: result
+  failed_when: result.rc != 0 and result.rc != 123
+
+- name: define secret
+  shell: "virsh secret-define --file /etc/ceph/secret.xml"
+
+- name: set secret value
+  shell: "virsh secret-set-value --secret {{ ceph_uuid }} --base64 {{ ceph_key }}"
+
+- name: restart openstack-nova-compute.service
+  service: name=openstack-nova-compute.service state=restarted enabled=yes

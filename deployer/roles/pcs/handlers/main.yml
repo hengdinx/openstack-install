@@ -1,0 +1,5 @@
+---
+# handlers file for pcs
+
+- name: restart pcs
+  systemd: name=pcsd state=restarted enabled=yes

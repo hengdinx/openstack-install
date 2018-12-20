@@ -1,0 +1,23 @@
+# controller init
+
+- name: remove /etc/httpd/conf.d/wsgi-keystone.conf
+  file: path=/etc/httpd/conf.d/wsgi-keystone.conf state=absent
+
+- name: update sysctl
+  sysctl: name={{ item.name }} value={{ item.value }} reload=yes
+  with_items:
+    - { name: net.ipv4.ip_nonlocal_bind, value: 1 }
+    - { name: net.ipv4.ip_local_port_range, value: "1024 65000"}
+    - { name: net.ipv4.ip_forward, value: 1 }
+    - { name: fs.file-max, value: 65535 }
+    - { name: net.ipv4.neigh.default.gc_thresh1, value: 1024 }
+    - { name: net.ipv4.neigh.default.gc_thresh2, value: 4096 }
+    - { name: net.ipv4.neigh.default.gc_thresh3, value: 8192 }
+
+- name: mask dracut-shutdown.service
+  systemd: name=dracut-shutdown.service masked=yes
+
+- name: change mode for mail.rc
+  file: path=/etc/mail.rc mode=777
+
+- include: openstacksdk.yml

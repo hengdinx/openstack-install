@@ -1,0 +1,105 @@
+---
+
+- name: cleanup nova
+  yum: name={{ item }} state=absent
+  with_items:
+    - openstack-nova-compute
+    - qemu-img-ev
+    - qemu-kvm-common-ev
+    - qemu-kvm-ev
+    - spice-server
+
+- name: install nova with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - redis
+    - python-redis
+    - openstack-nova-compute
+    - python-novaclient
+    - python-openstackclient
+    - qemu-img-ev
+    - qemu-kvm-common-ev
+    - qemu-kvm-ev
+    - spice-server
+    - libvirt
+    - libvirt-bash-completion
+    - libvirt-client
+    - libvirt-daemon
+    - libvirt-daemon-config-network
+    - libvirt-daemon-config-nwfilter
+    - libvirt-daemon-driver-interface
+    - libvirt-daemon-driver-lxc
+    - libvirt-daemon-driver-network
+    - libvirt-daemon-driver-nodedev
+    - libvirt-daemon-driver-nwfilter
+    - libvirt-daemon-driver-qemu
+    - libvirt-daemon-driver-secret
+    - libvirt-daemon-driver-storage
+    - libvirt-daemon-driver-storage-core
+    - libvirt-daemon-driver-storage-disk
+    - libvirt-daemon-driver-storage-gluster
+    - libvirt-daemon-driver-storage-iscsi
+    - libvirt-daemon-driver-storage-logical
+    - libvirt-daemon-driver-storage-mpath
+    - libvirt-daemon-driver-storage-rbd
+    - libvirt-daemon-driver-storage-scsi
+    - libvirt-daemon-kvm
+    - libvirt-libs
+
+- name: enable login for nova user and set password
+  user: name=nova password={{ nova_password |password_hash('sha512') }} generate_ssh_key=yes home=/home/nova shell=/bin/bash
+
+- name: copy local key to remote
+  copy: src=/root/.ssh/{{ item }} dest=/home/nova/.ssh/ mode=0600 owner=nova group=nova
+  with_items:
+    - authorized_keys
+    - id_rsa
+    - id_rsa.pub
+
+- name: get virt type
+  shell: echo $(count=$(egrep -c '(vmx|svm)' /proc/cpuinfo); if [ $count -eq 0 ];then   echo "qemu"; else   echo "kvm"; fi)
+  register: virt_type
+
+- name: config /etc/nova/nova.conf for compute node
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: libvirt, option: virt_type, value: "{{ virt_type.stdout }}" }
+
+- include: roles/nova/nova_all.yml
+
+- name: replace flag to double quotes
+  replace: path=/etc/nova/nova.conf regexp="DQ" replace='"'
+
+- name: modify /etc/libvirt/libvirtd.conf
+  ini_file:
+    path: /etc/libvirt/libvirtd.conf
+    section: null
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - {option: 'listen_tls', value: '0' }
+    - {option: 'listen_tcp', value: '1' }
+    - {option: 'auth_tcp', value: '"none"' }
+    - {option: 'keepalive_interval', value: '12' }
+    - {option: 'keepalive_count', value: '10' }
+
+- name: modify /etc/sysconfig/libvirtd
+  ini_file:
+    path: /etc/sysconfig/libvirtd
+    section: null
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items:
+    - { option: 'LIBVIRTD_CONFIG', value: '/etc/libvirt/libvirtd.conf' }
+    - { option: 'LIBVIRTD_ARGS', value: '"--listen"' }
+
+- name: restart libvirt/nova-compute
+  service: name={{ item }} state=restarted enabled=yes
+  with_items:
+    - openstack-nova-compute
+    - libvirtd
+    - redis

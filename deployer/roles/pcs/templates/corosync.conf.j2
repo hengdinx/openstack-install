@@ -1,0 +1,23 @@
+totem {
+version: 2
+secauth: off
+cluster_name: openstack-cluster
+transport: udpu
+}
+
+nodelist {
+{% for i in controllers %}
+  node {
+        ring{{ loop.index }}_addr: {{ i['hostname'] }}
+        nodeid: {{ loop.index }}
+       }
+{% endfor %}
+}
+
+quorum {
+provider: corosync_votequorum
+}
+
+logging {
+to_syslog: yes
+}

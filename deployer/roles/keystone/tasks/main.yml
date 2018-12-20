@@ -1,0 +1,174 @@
+---
+
+- name: clean up openstack-keystone
+  yum: name={{ item }} state=absent
+  with_items:
+    - openstack-keystone
+
+- name: cleanup /etc/httpd/conf.d/wsgi-keystone.conf
+  file: path=/etc/httpd/conf.d/wsgi-keystone.conf state=absent
+
+- block:
+  - name: cleanup pcs resources
+    shell: pcs resource delete httpd-clone
+    register: result
+    when: ha_enabled == True
+    failed_when: result.rc != 0 and "does not exist" not in result.stderr
+  
+  - name: restart http service with systemd
+    service: name=httpd state=restarted enabled=yes
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: install keystone packages
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - openstack-keystone
+    - mod_wsgi
+    - httpd
+    - python-keystone
+
+- name: config httpd.conf
+  lineinfile:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: "{{ item.re }}"
+    insertafter: '{{ item.ia }}'
+    line: '{{ item.line }}'
+    backrefs: yes
+  with_items:
+    - { re: '^Listen ', ia: '^#Listen ', line: 'Listen 80' }
+    - { re: '^WSGIPythonPath ', ia: '^Listen ', line: 'WSGIPythonPath /opt/zero/' }
+    - { re: '^ServerName ', ia: '^#ServerName ', line: 'ServerName {{ mg_ip }}' }
+
+- name: render /etc/httpd/conf.d/wsgi-keystone.conf
+  template: src=wsgi-keystone.conf.j2 dest=/usr/share/keystone/wsgi-keystone.conf 
+
+- name: lnk /usr/share/keystone/wsgi-keystone.conf
+  file: src=/usr/share/keystone/wsgi-keystone.conf dest=/etc/httpd/conf.d/wsgi-keystone.conf state=link
+
+- name: copy key file to remote
+  copy: src={{ item.src }} dest={{ item.dest }}
+  with_items:
+    - { src: server.crt, dest: /etc/pki/tls/certs/server.crt }
+    - { src: server.key, dest: /etc/pki/tls/private/server.key }
+
+- name: render /etc/httpd/conf.d/ssl.conf
+  lineinfile:
+    path: /etc/httpd/conf.d/ssl.conf
+    regexp: '{{ item.re }}'
+    line: '{{ item.line }}'
+    backrefs: yes
+  with_items:
+    - { re: '^Listen 443.*$', line: "#Listen 443 https" }
+    - { re: '^SSLCertificateFile', line: "SSLCertificateFile /etc/pki/tls/certs/server.crt" }
+    - { re: '^SSLCertificateKeyFile', line: "SSLCertificateKeyFile /etc/pki/tls/private/server.key" }
+
+- name: render temp_token.sh
+  template: src=temp_token.sh.j2 dest=/root/temp_token.sh
+
+- name: config /etc/keystone/keystone.conf
+  ini_file:
+    path: /etc/keystone/keystone.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items:
+    - { section: DEFAULT, option: admin_token, value: "{{ os_token }}" }
+    - { section: DEFAULT, option: debug, value: True }
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controller_hostname_list %}openstack:{{ openstack_rabbitmq_password }}@{{ i }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: memcache, option: servers, value: "{{ controller_vhostname }}:11211" }
+    - { section: database, option: connection, value: "mysql+pymysql://keystone:{{ mysql_keystone_password }}@{{ controller_vhostname }}/keystone" }
+    - { section: oslo_messaging_rabbit, option: rabbit_ha_queues, value: true }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_interval, value: 1 }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_backoff, value: 2 }
+    - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 2 }
+    - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 0 }
+    - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+
+- name: remove verbose option in keystone.conf
+  ini_file: path=/etc/keystone/keystone.conf section=DEFAULT option=verbose state=absent
+
+- name: render keystonerc_admin
+  template: src=keystonerc_admin.j2 dest=/root/keystonerc_admin
+
+- block:
+
+  - name: create database for keystone
+    mysql_db: name=keystone login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+  
+  - name: create user for keystone
+    mysql_user:
+      name: 'keystone'
+      login_host: "{{ vip }}"
+      login_user: root 
+      login_password: "{{ mysql_root_password }}"
+      host: "{{ item }}"
+      password: "{{ mysql_keystone_password }}"
+      priv: "keystone.*:ALL,GRANT"
+    with_items:
+      - "%"
+      - 127.0.0.1
+      - ::1
+      - "localhost"
+
+  - name: sync db
+    register: result
+    command: "keystone-manage db_sync"
+    become: true
+    become_user: keystone
+    until: result.rc == 0
+    retries: 5
+    delay: 10
+
+  - name: keystone fernet_setup
+    command: keystone-manage fernet_setup --keystone-user keystone --keystone-group keystone
+  
+  - name: keystone credential_setup
+    command: keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
+  
+  - name: keystone bootstrap
+    command: keystone-manage bootstrap --bootstrap-password {{ openstack_admin_password }} --bootstrap-admin-url http://{{ vip }}:35357/v3/ --bootstrap-internal-url http://{{ vip }}:5000/v3/ --bootstrap-public-url http://{{ vip }}:5000/v3/ --bootstrap-region-id {{ region_name }}
+    register: result
+    until: result.rc == 0
+    retries: 5
+    delay: 10
+
+  - name: fetch credential-keys/fernet-keys to local
+    shell: "scp -r /etc/keystone/{{ item }} root@{{ deploy_hostname }}:/tmp/"
+    with_items:
+      - credential-keys
+      - fernet-keys
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- include: keystone_ha_config.yml
+  when: ha_enabled == True
+
+- block:
+  - include: pcs_httpd.yml
+    when: ha_enabled == True
+
+  - name: restart httpd service
+    service: name=httpd state=restarted enabled=yes
+    when: ha_enabled == False
+  
+  - name: create /etc/openstack dir
+    file: path=/etc/openstack state=directory
+
+  - name: render clouds.yaml
+    template: src=clouds.yaml.j2 dest=/etc/openstack/clouds.yaml
+
+# before run this step need to install python-pip first, then copy openstacksdk and dependent packages to remote
+# install tar.gz and whl packages with pip install command.
+  - include: init.yml
+    environment:
+      OS_TOKEN: "{{ os_token }}"
+      OS_URL: "http://{{ controller_vhostname }}:35357/v3"
+      OS_IDENTITY_API_VERSION: 3
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'

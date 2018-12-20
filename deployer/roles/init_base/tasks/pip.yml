@@ -1,0 +1,9 @@
+---
+
+- name: install dev packages
+  yum: name={{ item }} state=latest
+  with_items:
+    - python2-pip
+    #- python-libs
+    #- python-ldap
+    #- python2-openstacksdk

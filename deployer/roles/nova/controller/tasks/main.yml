@@ -1,0 +1,242 @@
+---
+# tasks file for nova
+
+- name: cleanup nova
+  yum: name={{ item }} state=absent
+  with_items:
+    - openstack-nova-api
+    - openstack-nova-cert
+    - openstack-nova-conductor
+    - openstack-nova-console
+    - openstack-nova-novncproxy
+    - openstack-nova-scheduler
+    - openstack-nova-placement-api
+    - openstack-nova-spicehtml5proxy
+    - python-novaclient
+
+- name: install nova with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - openstack-nova-api
+    - openstack-nova-cert
+    - openstack-nova-conductor
+    - openstack-nova-console
+    - openstack-nova-novncproxy
+    - openstack-nova-scheduler
+    - openstack-nova-placement-api
+    - openstack-nova-spicehtml5proxy
+    - python-novaclient
+    - python-openstackclient
+    - qemu-img-ev
+    - qemu-kvm-common-ev
+    - qemu-kvm-ev
+    - spice-server
+    - libvirt
+    - libvirt-bash-completion
+    - libvirt-client
+    - libvirt-daemon
+    - libvirt-daemon-config-network
+    - libvirt-daemon-config-nwfilter
+    - libvirt-daemon-driver-interface
+    - libvirt-daemon-driver-lxc
+    - libvirt-daemon-driver-network
+    - libvirt-daemon-driver-nodedev
+    - libvirt-daemon-driver-nwfilter
+    - libvirt-daemon-driver-qemu
+    - libvirt-daemon-driver-secret
+    - libvirt-daemon-driver-storage
+    - libvirt-daemon-driver-storage-core
+    - libvirt-daemon-driver-storage-disk
+    - libvirt-daemon-driver-storage-gluster
+    - libvirt-daemon-driver-storage-iscsi
+    - libvirt-daemon-driver-storage-logical
+    - libvirt-daemon-driver-storage-mpath
+    - libvirt-daemon-driver-storage-rbd
+    - libvirt-daemon-driver-storage-scsi
+    - libvirt-daemon-kvm
+    - libvirt-libs
+
+- name: enable login for nova user and set password
+  user: name=nova password={{ nova_password |password_hash('sha512') }} generate_ssh_key=yes home=/home/nova shell=/bin/bash
+
+- name: copy local key to remote
+  copy: src=/root/.ssh/{{ item }} dest=/home/nova/.ssh/ mode=0600 owner=nova group=nova
+  with_items:
+    - id_rsa
+    - id_rsa.pub
+    - authorized_keys
+
+- name: config /etc/nova/nova.conf for controller
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: osapi_compute_listen, value: "{{ cluster_ip }}" }
+    - { section: DEFAULT, option: metadata_listen, value: "{{ cluster_ip }}" }
+    - { section: api_database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/nova_api" }
+    - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/nova" }
+    - { section: api, option: auth_strategy, value: keystone }
+    - { section: scheduler, option: driver, value: filter_scheduler }
+    - { section: filter_scheduler, option: available_filters, value: "nova.scheduler.filters.all_filters" }
+    - { section: filter_scheduler, option: enabled_filters, value: "RetryFilter,AvailabilityZoneFilter,RamFilter,DiskFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,PciPassthroughFilter" }
+    #- { section: filter_scheduler, option: available_filters, value: "nova.scheduler.filters.pci_passthrough_filter.PciPassthroughFilter" }
+    - { section: pci, option: alias, value: '{DQnameDQ: DQzerovgpuDQ, DQvendor_idDQ: DQ1002DQ, DQproduct_idDQ: DQ692fDQ, DQdevice_typeDQ: DQtype-VFDQ}' }
+    - { section: neutron, option: service_metadata_proxy, value: True }
+    - { section: neutron, option: metadata_proxy_shared_secret, value: "{{ metadata_proxy_shared_secret }}" }
+    - { section: cache, option: backend, value: oslo_cache.memcache_pool}
+    - { section: cache, option: enabled, value: true}
+    - { section: cache, option: memcache_servers, value: "{{ vip }}" }
+
+
+- include: roles/nova/nova_all.yml
+
+- name: replace flag to double quotes
+  replace: path=/etc/nova/nova.conf regexp="DQ" replace='"'
+
+- name: modify /etc/httpd/conf.d/00-nova-placement-api.conf
+  blockinfile:
+    path: /etc/httpd/conf.d/00-nova-placement-api.conf
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR NOVA-PLACEMENT-API"
+    block: |
+      <Directory /usr/bin>
+         <IfVersion >= 2.4>
+            Require all granted
+         </IfVersion>
+         <IfVersion < 2.4>
+            Order allow,deny
+            Allow from all
+         </IfVersion>
+      </Directory>
+
+# use backrefs to avoid duplicated line in file(which is a bug)
+- name: modify Listen IP for /etc/httpd/conf.d/00-nova-placement-api.conf
+  lineinfile:
+    path: /etc/httpd/conf.d/00-nova-placement-api.conf
+    regexp: '{{ item.pattern }}'
+    line: '{{ item.newline }}'
+    insertafter: '{{ item.after }}'
+    backrefs: yes
+  with_items:
+    - { pattern: "^Listen 8778", newline: "Listen {{ cluster_ip }}:8778", after: '^#Listen ' }
+    - { pattern: '^<VirtualHost \*:8778', newline: "<VirtualHost {{ cluster_ip }}:8778>", after: '^Listen ' }
+
+- include: nova_ha_config.yml
+  when: ha_enabled == True
+
+- block:
+  - name: create database for nova
+    mysql_db: name={{ item }} login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+    with_items:
+      - nova
+      - nova_api
+      - nova_cell0
+  
+  - name: grant roles for nova users
+    register: raresult
+    os_user_role:
+      cloud: admin_cloud
+      user: "{{ item.user }}"
+      role: admin
+      project: "{{ item.project }}"
+    until: not raresult.failed
+    retries: 10
+    delay: 10
+    with_items:
+      - { user: apiadmin, project: admin }
+      - { user: nova, project: service }
+      - { user: nova, project: admin }
+      - { user: placement, project: service }
+
+  #- debug: var=raresult #.results[0]["failed"]
+
+  - name: create nova service
+    os_keystone_service:
+      cloud: admin_cloud
+      name: "{{ item.name }}"
+      state: present
+      service_type: "{{ item.type }}"
+      description: "{{ item.description }}"
+    with_items:
+      - { name: 'nova', type: 'compute', description: 'OpenStack Compute'}
+      - { name: 'placement', type: 'placement', description: 'Placement API'}
+
+  - name: Create a service for compute
+    os_keystone_endpoint:
+      cloud: admin_cloud
+      service: nova
+      endpoint_interface: "{{ item }}"
+      url: "http://{{ controller_vhostname }}:8774/v2.1/%(tenant_id)s"
+      region: "{{ region_name }}"
+      state: present
+    with_items:
+      - public
+      - internal
+      - admin
+
+  - name: create endpoint for placement
+    os_keystone_endpoint:
+      cloud: admin_cloud
+      service: placement
+      endpoint_interface: "{{ item }}"
+      url: http://{{ controller_vhostname }}:8778
+      region: "{{ region_name }}"
+      state: present
+    with_items:
+      - public
+      - internal
+      - admin
+
+  - name: nova-manage api_db sync
+    register: result
+    shell: "nova-manage {{ item }} sync"
+    become: true
+    become_user: nova
+    until: result.rc == 0
+    retries: 10
+    delay: 10
+    with_items:
+      - api_db
+  
+  - name: nova-manage cell_v2 map_cell0 sync
+    register: result
+    shell: "nova-manage cell_v2 map_cell0"
+    become: true
+    become_user: nova
+    until: result.rc == 0
+    retries: 10
+    delay: 10
+
+  - name: nova-manage cell_v2 create_cell sync
+    register: result
+    shell: "nova-manage cell_v2 create_cell --name=cell1 --verbose --transport-url=rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}"
+    become: true
+    become_user: nova
+    until: result.rc == 0
+    retries: 10
+    delay: 10
+    failed_when: result.rc != 0 and 'already exists' not in result.stdout
+
+  - name: nova-manage db sync
+    register: result
+    shell: "nova-manage {{ item }} sync"
+    become: true
+    become_user: nova
+    until: result.rc == 0
+    retries: 10
+    delay: 10
+    with_items:
+      - db
+
+  - include: nova_pcs_config.yml
+    when: ha_enabled == True
+
+  - include: nova_service_restart.yml
+    when: ha_enabled == False
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+

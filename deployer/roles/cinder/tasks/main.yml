@@ -1,0 +1,167 @@
+---
+# tasks file for cinder
+
+- name: install cinder packages
+  yum: name={{ item }} state=latest
+  with_items:
+    - openstack-cinder
+    - python-cinderclient
+    - targetcli
+    - scsi-target-utils
+
+- name: config /etc/tgt/tgtd.conf
+  lineinfile: path=/etc/tgt/tgtd.conf line="include /var/lib/cinder/volumes/*"
+
+- name: config /etc/cinder/cinder.conf
+  ini_file:
+    path: /etc/cinder/cinder.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+    mode: 0666
+  with_items:
+    - { section: DEFAULT, option: debug, value: True }
+    - { section: DEFAULT, option: verbose, value: True }
+    - { section: DEFAULT, option: osapi_volume_listen, value: "{{ cluster_ip }}" }
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: DEFAULT, option: my_ip, value: "{{ cluster_ip }}" }
+    - { section: DEFAULT, option: auth_strategy, value: keystone }
+    - { section: DEFAULT, option: rpc_backend, value: rpc_backend }
+    - { section: DEFAULT, option: control_exchange, value: cinder }
+    - { section: DEFAULT, option: glance_api_servers, value: "http://{{ controller_vhostname }}:9292" }
+    - { section: key_manager, option: fixed_key, value: "{{ openstack_key }}" }
+    - { section: keystone_authtoken, option: auth_uri, value: "http://{{ controller_vhostname }}:5000" }
+    - { section: keystone_authtoken, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: keystone_authtoken, option: memcached_servers, value: "{{ controller_vhostname }}:11211" }
+    - { section: keystone_authtoken, option: auth_type, value: password }
+    - { section: keystone_authtoken, option: project_domain_name, value: default }
+    - { section: keystone_authtoken, option: user_domain_name, value: default }
+    - { section: keystone_authtoken, option: project_name, value: service }
+    - { section: keystone_authtoken, option: username, value: glance }
+    - { section: keystone_authtoken, option: password, value: "{{ openstack_glance_password }}" }
+    - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/glance" }
+    - { section: database, option: max_retries, value: -1 }
+    - { section: paste_deploy, option: flavor, value: keystone }
+    - { section: glance_store, option: stores, value: "file,http" }
+    - { section: glance_store, option: default_store, value: file }
+    - { section: glance_store, option: filesystem_store_datadir, value: /var/lib/glance/images/ }
+    - { section: oslo_messaging_rabbit, option: rabbit_ha_queues, value: true }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_interval, value: 1 }
+    - { section: oslo_messaging_rabbit, option: rabbit_retry_backoff, value: 2 }
+    - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 0 }
+    - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 30 }
+    - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+    - { section: oslo_messaging_rabbit, option: rabbit_userid, value: openstack }
+    - { section: oslo_messaging_rabbit, option: rabbit_password, value: "{{ openstack_rabbitmq_password }}" }
+    - { section: oslo_concurrency, option: lock_path, value: /var/lib/cinder/tmp }
+
+- name: modify /usr/lib/python2.7/site-packages/cinderclient/shell.py
+  blockinfile:
+    path: /usr/lib/python2.7/site-packages/cinderclient/shell.py
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR CINDER"
+    insertafter: "import sys"
+    block: |
+      reload(sys)
+      sys.setdefaultencoding("utf-8")
+
+- include: cinder_ha_config.yml
+  when: ha_enabled == True
+
+- block:
+
+  - name: cleanup cinder db
+    mysql_db: name=cinder login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=absent
+
+  - name: create database for cinder
+    mysql_db: name=cinder login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+
+  - name: grant roles for cinder users
+    os_user_role:
+      cloud: admin_cloud
+      user: "{{ item.user }}"
+      role: admin
+      project: "{{ item.project }}"
+    with_items:
+      - { user: cinder, project: service }
+
+  - name: create cinder/cinderv2 serivce
+    os_keystone_service:
+      cloud: admin_cloud
+      name: "{{ item.name }}"
+      state: present
+      service_type: "{{ item.type }}"
+      description: "{{ item.description }}"
+    with_items:
+      - { name: cinder, type: 'volume', description: 'OpenStack Block Storage'}
+      - { name: cinderv2, type: 'volumev2', description: 'OpenStack Block Storage'}
+
+  - name: Create endpoint for cinder
+    os_keystone_endpoint:
+      cloud: admin_cloud
+      service: "{{ item.service }}"
+      endpoint_interface: "{{ item.interface }}"
+      url: "{{ item.url }}"
+      region: "{{ region_name }}"
+      state: present
+    with_items:
+      - { service: cinder, interface: public, url: "http://{{ controller_vhostname }}:8776/v1/%(tenant_id)s" }
+      - { service: cinder, interface: internal, url: "http://{{ controller_vhostname }}:8776/v1/%(tenant_id)s" }
+      - { service: cinder, interface: admin, url: "http://{{ controller_vhostname }}:8776/v1/%(tenant_id)s" }
+      - { service: cinderv2, interface: public, url: "http://{{ controller_vhostname }}:8776/v2/%(tenant_id)s" }
+      - { service: cinderv2, interface: internal, url: "http://{{ controller_vhostname }}:8776/v2/%(tenant_id)s" }
+      - { service: cinderv2, interface: admin, url: "http://{{ controller_vhostname }}:8776/v2/%(tenant_id)s" }
+
+  - name: cinder-manage db sync
+    register: result
+    shell: "cinder-manage db sync"
+    become: true
+    become_user: cinder
+    until: result.rc == 0
+    retries: 10
+    delay: 5
+
+  - include: cinder_pcs_restart.yml
+    when: ha_enabled == True
+
+  - include: cinder_service_restart.yml
+    when: ha_enabled == False
+
+  - name: add type lvm
+    environment:
+      OS_PASSWORD: "{{ openstack_admin_password }}"
+      OS_USERNAME: admin
+      OS_URL: "http://{{ controller_vhostname }}:35357/v3"
+      OS_IDENTITY_API_VERSION: 3
+      OS_AUTH_URL: "http://{{ controller_vhostname }}:5000/v3"
+      OS_USER_DOMAIN_NAME: Default
+      OS_PROJECT_NAME: admin
+      OS_PROJECT_DOMAIN_NAME: Default
+    command: "cinder type-create lvm"
+    register: result
+    until: result.rc == 1 or result.rc == 0
+    retries: 5
+    delay: 10
+    failed_when: result.rc != 1 and result.rc != 0
+
+  - name: add type-key
+    environment:
+      OS_PASSWORD: "{{ openstack_admin_password }}"
+      OS_USERNAME: admin
+      OS_URL: "http://{{ controller_vhostname }}:35357/v3"
+      OS_IDENTITY_API_VERSION: 3
+      OS_AUTH_URL: "http://{{ controller_vhostname }}:5000/v3"
+      OS_USER_DOMAIN_NAME: Default
+      OS_PROJECT_NAME: admin
+      OS_PROJECT_DOMAIN_NAME: Default
+    shell: "cinder type-key lvm set volume_backend_name=lvm"
+    register: result
+    until: result.rc == 1 or result.rc ==0
+    retries: 5
+    delay: 10
+    failed_when: result.rc != 1 and result.rc != 0
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+

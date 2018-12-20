@@ -1,0 +1,45 @@
+{"deploy_conf":{
+"deploy_ip_mg": "10.10.40.11",
+"deploy_ip_sto": "",
+"master_node": "controller1",
+"deploy_netmask": "255.255.255.0",
+"action_type": "recover_controller",
+"nodes": [
+{
+"hostname": "controller1",
+"root_password": "1",
+"node_role":["controller", "neutron"],
+"mg_net":{
+"port":"eth0",
+"ip":"10.10.40.11",
+"netmask":"255.255.255.0"
+},
+"tenant_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_internal_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"ex_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"cluster_net":{
+"port":"",
+"ip":"",
+"netmask":""
+}
+}
+]
+}
+}

@@ -1,0 +1,24 @@
+---
+# tasks file for cmp
+
+- include: cmp_controller.yml
+  when: hostname in groups.controller
+
+- block:
+  - name: restart http resource
+    shell: pcs resource restart httpd-clone
+    when: ha_enabled == True
+
+  - name: restart httpd service
+    service: name=httpd state=restarted enabled=yes
+    when: ha_enabled == False
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- include: tserver.yml
+  when: 'hostname in groups.controller and ha_enabled == True and action_type == "install"'
+
+- include: tserver_service_restart.yml
+  when: hostname in groups.controller and ha_enabled == False
+

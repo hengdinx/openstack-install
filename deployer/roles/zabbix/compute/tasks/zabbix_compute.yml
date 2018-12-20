@@ -1,0 +1,88 @@
+---
+
+- name: install zabbix rpms
+  yum: name={{ item }} state=latest
+  with_items:
+    - zabbix22-agent
+    - mp-utils
+
+- name: create /var/lib/zabbix
+  file: path=/var/lib/zabbix state=directory
+
+- name: add iptable rules for zabbix
+  blockinfile:
+    path: /etc/sysconfig/iptables
+    insertbefore: "^COMMIT"
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR ZABBIX"
+    block: |
+      -I INPUT -p tcp -m tcp --dport 10050 -j ACCEPT
+      -I INPUT -p tcp -m tcp --sport 10050 -j ACCEPT
+
+- name: restart iptables
+  service: name=iptables state=restarted enabled=yes
+
+- name: render /etc/zabbix_agentd.conf
+  ini_file:
+    path: /etc/zabbix_agentd.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: null, option: Server, value: "{% for i in controllers %}{{ i['cluster_ip'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: null, option: ServerActive, value: "{% for i in controllers %}{{ i['cluster_ip'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: null, option: HostnameItem, value: system.hostname }
+    - { section: null, option: HostMetadata, value: virt }
+    - { section: null, option: UnsafeUserParameters, value: 1 }
+    - { section: null, option: Include, value: /etc/zabbix_agentd.conf.d }
+    - { section: null, option: Timeout, value: 23 }
+    - { section: null, option: ListenIP, value: "{{ cluster_ip }}" }
+
+- name: comment hostname line in /etc/zabbix_agentd.conf
+  ini_file:
+    path: /etc/zabbix_agentd.conf
+    section: null
+    option: Hostname
+    state: absent
+
+- name: cleanup /etc/sudoers configs
+  lineinfile:
+    path: /etc/sudoers
+    regexp: "{{ item }}"
+    state: absent
+  with_items:
+    - "^Default.*requiretty"
+    - "^zabbix ALL=NOPASSWD:"
+    - "^apache ALL=NOPASSWD:"
+
+- name: add config to /etc/sudoer
+  lineinfile:
+    path: /etc/sudoers
+    line: "{{ item }}"
+  with_items:
+    - "zabbix ALL=NOPASSWD:/usr/bin/touch,/sbin/shutdown,/usr/bin/ipmitool,/usr/sbin/vgs,/usr/bin/systemctl,/usr/bin/qemu-img,/usr/bin/xargs,/usr/bin/awk,/usr/bin/virsh,/usr/bin/rm"
+    - "apache ALL=NOPASSWD:ALL"
+
+- name: render /var/lib/zabbix/interface_name
+  template: src={{ item.src }} dest={{ item.dest }} mode=0755
+  with_items:
+    - { src: interface_name.j2, dest: /var/lib/zabbix/interface_name }
+
+- name: modify owner and group for /var/lib/zabbix
+  file: path=/var/lib/zabbix owner=zabbix group=zabbix recurse=yes state=directory mode=0777
+
+- name: modify zabbix-agent.service
+  ini_file:
+    path: /usr/lib/systemd/system/zabbix-agent.service
+    section: Service
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  with_items:
+    - { option: Restart, value: always }
+    - { option: RestartSec, value: 20s }
+
+- name: daemon-reload
+  systemd:
+    name: zabbix-agent.service
+    daemon_reload: yes
+    state: restarted
+    enabled: yes

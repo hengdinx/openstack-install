@@ -1,0 +1,4 @@
+---
+
+- name: set StrictHostKeyChecking
+  lineinfile: path=/etc/ssh/ssh_config line="StrictHostKeyChecking no"

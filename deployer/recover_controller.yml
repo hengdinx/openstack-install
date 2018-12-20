@@ -1,0 +1,73 @@
+
+- hosts: localhost
+  gather_facts: False
+  roles:
+    - init_local
+  vars_files:
+    - default.yml
+
+- hosts: all
+  gather_facts: False
+  roles:
+    - config_ssh
+  vars_files:
+    - default.yml
+
+- hosts: new_node
+  gather_facts: False
+  roles:
+    - init_base
+    - network
+    - ntp
+    - system_controller
+    - rsyslog
+    - recover_gfs
+    - pcs
+    - haproxy
+    - database
+    - rabbitmq
+    - memcached
+    - keystone
+    - nova/controller
+    - glance
+    - neutron/controller
+    - cinder
+    - consul
+    - zabbix/controller
+    - cmp/controller
+    - lbs
+    - docker
+    - vpn
+    - ceph/controller
+    - version
+  vars_files:
+    - default.yml
+    - keys.yml
+
+- hosts: new_node_compute
+  gather_facts: False
+  roles:
+    - nova/compute
+    - neutron/compute
+    - consul
+    - zabbix/compute
+    - cmp/compute
+    - lbc
+    - ceph/compute
+    - version
+  vars_files:
+    - default.yml
+    - keys.yml
+
+- hosts: controller
+  gather_facts: False
+  roles:
+    - zabbix_init
+  vars_files:
+    - default.yml
+
+- hosts: new_node
+  gather_facts: False
+  roles:
+    - recover_pcs
+

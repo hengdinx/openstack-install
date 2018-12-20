@@ -1,0 +1,17 @@
+---
+
+- name: restart glance-api
+  shell: pcs resource restart openstack-glance-api-clone
+
+- name: wait until glance resource start
+  shell: 'pcs status|grep -A 1 {{ item }}'
+  register: result
+  retries: 5
+  delay: 10
+  until: '"Started" in result.stdout'
+  with_items:
+    - openstack-glance-api
+
+- name: restart haproxy
+  shell: pcs resource restart haproxy
+

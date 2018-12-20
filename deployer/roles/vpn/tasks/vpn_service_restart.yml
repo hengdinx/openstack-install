@@ -1,0 +1,4 @@
+---
+
+- name: restart vpn
+  service: name=vpns state=restarted enabled=yes

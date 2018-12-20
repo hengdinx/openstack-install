@@ -1,0 +1,55 @@
+---
+# tasks file for haproxy
+
+- name: install haproxy via yum
+  yum: name=haproxy state=latest
+
+- name: ensure /etc/rsyslog.d/haproxy.conf exists
+  file: path=/etc/rsyslog.d/haproxy.conf state=touch
+
+- name: modify rsyslog config
+  lineinfile:
+    path: /etc/rsyslog.d/haproxy.conf
+    regexp: "^SYSLOGD_OPTIONS=.*"
+    line: "SYSLOGD_OPTIONS=\"-c 2 -r -m 0\""
+  notify: restart rsyslog
+
+- name: render haproxy.cfg
+  template: src=haproxy.cfg.j2 dest=/etc/haproxy/haproxy.cfg
+
+- name: config haproxy to be managed by pcs
+  block:
+    - name: remove haproxy resource
+      command: pcs resource delete haproxy
+      register: del_haproxy
+      failed_when: del_haproxy.rc != 0 and "does not exist" not in del_haproxy.stderr
+
+    - name: create resource for haproxy
+      command: pcs resource create haproxy systemd:haproxy op start interval="0" timeout="300s" op stop interval="0" timeout="300s" on-fail="restart"
+
+    - name: ensure haproxy resource is started
+      shell: 'pcs status|grep haproxy'
+      register: haproxy_status
+      retries: 10
+      delay: 10
+      until: '"Started" in haproxy_status.stdout'
+
+    - name: set order for haproxy
+      command: pcs constraint order start vip then haproxy kind=Optional
+
+    - name: set colocation for haproxy
+      command: pcs constraint colocation add haproxy with vip
+
+    - name: restart haproxy with pcs
+      command: pcs resource restart haproxy
+
+    - name: ensure haproxy resource is started
+      shell: 'pcs status|grep vip'
+      register: haproxy_status
+      retries: 5
+      delay: 10
+      until: '"Started" in haproxy_status.stdout'
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'

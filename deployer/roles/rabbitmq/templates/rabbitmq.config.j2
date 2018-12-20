@@ -1,0 +1,31 @@
+[
+ {rabbit,
+  [
+    {tcp_listeners, [{'{{ cluster_ip }}', 5672}]},
+    {heartbeat, 60},
+    {cluster_partition_handling, pause_minority}
+  ]},
+ {kernel,
+  [
+  ]},
+ {rabbitmq_management,
+  [
+  ]},
+ {rabbitmq_shovel,
+  [{shovels,
+    [
+    ]}
+  ]},
+ {rabbitmq_stomp,
+  [
+  ]},
+ {rabbitmq_mqtt,
+  [
+  ]},
+ {rabbitmq_amqp1_0,
+  [
+  ]},
+ {rabbitmq_auth_backend_ldap,
+  [
+  ]}
+].

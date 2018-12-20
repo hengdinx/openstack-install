@@ -1,0 +1,9 @@
+polkit.addRule(function(action, subject) {
+        if (action.id == "org.libvirt.unix.manage" &&
+            subject.user == "qemu") {
+                return polkit.Result.YES;
+                polkit.log("action=" + action);
+                polkit.log("subject=" + subject);
+        }
+});
+

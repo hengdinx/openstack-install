@@ -1,0 +1,14 @@
+[Unit]
+Description=consul server on mgmt_network
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/consul
+Restart=on-failure
+ExecStart=/usr/bin/consul agent{% if hostname in groups.controller %} -bootstrap-expect {% if ha_enabled %}2{% else %}1{% endif %} -server{% endif %} -data-dir /opt/consul0/data/ -node {{ hostname }}.{{ domain }} -bind={{ cluster_ip }} -config-dir /opt/consul0/consul.d/ -enable-script-checks=true -datacenter=mgmt_dc -ui -client {{ cluster_ip }} {% for i in controllers %}{% if i['mg_ip'] != mg_ip %} -retry-join {{ i['cluster_ip'] }}{% endif %}{% endfor %}  -encrypt=31sldmeGDh+btHSyzZQrRw==
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+

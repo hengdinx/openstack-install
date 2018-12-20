@@ -1,0 +1,25 @@
+---
+# tasks file for recover_pcs
+
+- name: auth for cluster
+  shell: "pcs cluster auth {{ hostname }} -u hacluster -p hacluster --force"
+  delegate_to: "{{ master_node }}"
+  register: result
+  until: result.rc == 0
+  retries: 5
+  delay: 5
+
+- name: auth for node
+  shell: "pcs cluster auth {{ hostname }} -u hacluster -p hacluster --force"
+
+- name: copy corosync.conf to recover node
+  copy: src=/tmp/corosync.conf dest=/etc/corosync
+
+- name: sync pcs cluster
+  shell: pcs cluster sync
+
+- name: pcs cluster start
+  shell: "pcs cluster start {{ hostname }}"
+
+- name: pcs cluster enable
+  shell: "pcs cluster enable {{ hostname }}"

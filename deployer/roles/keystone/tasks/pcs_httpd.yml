@@ -1,0 +1,36 @@
+---
+
+- name: remove httpd resource
+  command: pcs resource delete httpd
+  register: del_httpd
+  failed_when: del_httpd.rc != 0 and "does not exist" not in del_httpd.stderr
+
+- name: create httpd resource
+  command: pcs resource create httpd systemd:httpd --clone interleave=true op start interval="0" timeout="300s" op stop interval="0" timeout="300s"
+
+- name: wait until httpd-clone start
+  shell: 'pcs status|grep -A 1 httpd-clone'
+  register: httpd_status
+  retries: 10
+  delay: 10
+  until: '"Started" in httpd_status.stdout'
+
+- name: restart httpd resource
+  shell: pcs resource restart httpd-clone
+
+- name: wait until httpd started
+  shell: 'pcs status|grep -A 1 httpd-clone'
+  register: httpd_status
+  retries: 10
+  delay: 10
+  until: '"Started" in httpd_status.stdout'
+
+- name: restart haproxy with pcs
+  command: pcs resource restart haproxy
+
+- name: wait until haproxy started
+  shell: 'pcs status|grep haproxy'
+  register: haproxy_status
+  retries: 10
+  delay: 10
+  until: '"Started" in haproxy_status.stdout'

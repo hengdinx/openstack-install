@@ -1,0 +1,25 @@
+---
+
+- name: set StrictHostKeyChecking
+  lineinfile: path=/etc/ssh/ssh_config line="StrictHostKeyChecking no"
+
+- name: set sshd service
+  lineinfile: path=/etc/ssh/sshd_config line={{ item }}
+  with_items:
+    - GSSAPIAuthentication no
+    - GSSAPICleanupCredentials no
+    - GSSAPIStrictAcceptorCheck no
+    - UseDNS no
+
+- name: copy local key to remote
+  copy: src=/root/.ssh/{{ item }} dest=/root/.ssh/ mode=0600
+  with_items:
+    - id_rsa
+    - id_rsa.pub
+
+- name: restart sshd
+  service: name=sshd state=restarted enabled=yes
+
+- name: render /etc/hosts
+  template: src=hosts.j2 dest=/etc/hosts
+

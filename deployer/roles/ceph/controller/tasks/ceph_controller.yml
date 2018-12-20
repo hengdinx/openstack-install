@@ -1,0 +1,55 @@
+---
+
+- name: config glance-api.conf for ceph
+  ini_file:
+    path: /etc/glance/glance-api.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: DEFAULT, option: show_multiple_locations, value: True }
+    - { section: glance_store, option: stores, value: 'rbd,http' }
+    - { section: glance_store, option: default_store, value: rbd }
+    - { section: glance_store, option: rbd_store_pool, value: glance }
+    - { section: glance_store, option: rbd_store_user, value: "{{ ceph_user }}" }
+    - { section: glance_store, option: rbd_store_ceph_conf, value: /etc/ceph/ceph.conf }
+    - { section: glance_store, option: rbd_store_chunk_size, value: 8 }
+
+- block:
+
+  - include: ceph_pcs_restart.yml
+    when: ha_enabled == True
+
+  - name: restart glance-api service and haproxy
+    service: name={{ item }} state=restarted enabled=yes
+    with_items:
+      - openstack-glance-api
+
+  - name: add cinder type ceph
+    environment:
+      OS_PASSWORD: "{{ openstack_admin_password }}"
+      OS_USERNAME: admin
+      OS_URL: "http://{{ controller_vhostname }}:35357/v3"
+      OS_IDENTITY_API_VERSION: 3
+      OS_AUTH_URL: "http://{{ controller_vhostname }}:5000/v3"
+      OS_USER_DOMAIN_NAME: Default
+      OS_PROJECT_NAME: admin
+      OS_PROJECT_DOMAIN_NAME: Default
+    command: "{{ item }}"
+    register: result
+    with_items:
+      - "cinder type-create ceph"
+      - "cinder type-key ceph set volume_backend_name=ceph"
+    until: result.rc == 1 or result.rc == 0
+    retries: 5
+    delay: 10
+    failed_when: result.rc != 1 and result.rc != 0
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+
+- name: start openstack-glance-task service on nodes with compute and controller role
+  service: name=openstack-glance-task state=restarted enabled=yes
+  when: '"controller" in my_role and "compute" in my_role'
+

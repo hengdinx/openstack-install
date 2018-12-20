@@ -1,0 +1,6 @@
+---
+# tasks file for zabbix
+
+- name: include zabbix_compute
+  include: zabbix_compute.yml
+  when: '"controller" not in my_role'

@@ -1,0 +1,64 @@
+---
+# tasks file for database
+
+- name: stop all mysql/mariadb process
+  shell: "ps -ef |egrep 'mysql|mariadb'|grep -v grep|awk '{print $2}'|xargs kill -9"
+  register: kill_db
+  failed_when: kill_db.rc != 0 and kill_db.rc != 123
+
+- name: remove existing mysql package
+  yum: name={{ item }} state=absent
+  with_items:
+    - prefix
+    - MariaDB-client
+    - MariaDB-Galera-server
+    - galera
+    - mysql
+    - MySQL-python
+    - mariadb-config
+
+- name: clean up database and config files
+  file: path={{ item }} state=absent
+  with_items:
+    - /var/lib/mysql/
+    - /etc/my.cnf
+    - /etc/my.cnf.d/
+    - /usr/share/mysql/
+
+- name: install MariaDB with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - MariaDB-client
+    - MariaDB-Galera-server
+    - galera
+    - MySQL-python
+
+- name: render wsrep.cnf
+  template: src=wsrep.cnf.j2 dest=/etc/my.cnf
+
+- block:
+  - name: bootstrap mysql cluster on first node
+    command: service mysql start --wsrep-new-cluster
+    run_once: true
+    delegate_to: "{{ master_node }}"
+  
+  - name: stop mysql service on other nodes
+    service: name=mysql state=stopped
+    when: hostname != master_node
+  
+  - name: start mysql with service command
+    command: service mysql start
+    when: hostname != master_node
+  
+  - include: security.yml
+    when: hostname == master_node
+  when: 'action_type == "install"'
+
+- block:
+  - name: stop mysql service on other nodes
+    service: name=mysql state=stopped
+
+  - name: start mysql with service command
+    command: service mysql start
+  when: 'action_type == "recover_controller"'
+

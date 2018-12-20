@@ -1,0 +1,79 @@
+---
+# gluster config
+
+- name: umount /mnt/gfs
+  mount: path=/mnt/gfs state=absent
+
+- name: stop glusterd service
+  service: name=glusterd state=restarted enabled=yes
+
+- name: create /var/lib/zero/OTC
+  file: path={{ item }} state=directory owner=apache group=apache
+  with_items:
+    - /var/lib/zero/OTC
+    - /var/lib/zero/OTC/ISO
+    - /var/lib/zero/ISO
+    - /var/lib/zero/ISO/ISO
+
+- name: get uuid for the recover node
+  shell: "gluster peer status|grep -A 1 {{ hostname }}|grep Uuid|awk '{print $2}'"
+  register: gfs_uuid
+  delegate_to: "{{ master_node }}"
+
+- name: start necessary services
+  service: name={{ item }} state=restarted enabled=yes
+  with_items:
+    - glusterd
+
+- name: wait /var/lib/glusterd/glusterd.info generate
+  shell: ls /var/lib/glusterd/glusterd.info
+  register: result
+  until: result.rc == 0
+  retries: 5
+  delay: 10
+
+- name: modify /var/lib/glusterd/glusterd.info
+  ini_file:
+    path: /var/lib/glusterd/glusterd.info
+    option: UUID
+    section: null
+    no_extra_spaces: yes
+    value: "{{ gfs_uuid.stdout }}"
+
+- name: copy configure file for gfs
+  copy: src={{ item.src }}  dest={{ item.dest }} group=root owner=root mode=755
+  with_items:
+    - { src: gfsmount, dest: /usr/bin/gfsmount }
+    - { src: gfsmount.service, dest: /usr/lib/systemd/system/gfsmount.service }
+    - { src: del_brick.py, dest: /tmp/ }
+
+- name: start necessary services
+  service: name=glusterd state=restarted enabled=yes
+
+- name: probe peer
+  gluster_peer: state=present nodes={{ controller_hostname_list }}
+
+- name: restart necessary services
+  service: name=glusterd state=restarted enabled=yes
+
+- name: remove brick
+  shell: "/tmp/del_brick.py {{ hostname }}"
+
+- name: remove /mnt/gfs
+  file: path=/mnt/gfs state=absent owner=apache group=apache
+
+- name: create /mnt/gfs
+  file: path=/mnt/gfs state=directory owner=apache group=apache
+
+- name: add brick
+  gluster_volume: state=present name=mygfs replicas=3 bricks=/mnt/gfs cluster={{ hostname }} force=yes
+
+- name: sleep 20s to wait for sync
+  shell: sleep 20
+
+- name: restart gfsmount.service
+  systemd:
+    name: gfsmount
+    daemon_reload: yes
+    state: started
+    enabled: yes
