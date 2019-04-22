@@ -39,6 +39,7 @@ class Json_config(object):
         self.action = deploy_conf["action_type"]
         self.deploy_ip_mg = deploy_conf['deploy_ip_mg']
         self.deploy_ip_sto = deploy_conf['deploy_ip_sto']
+        self.need_updatedb = False
         if deploy_conf.get("master_node"):
             self.master_node = deploy_conf["master_node"]
         else:
@@ -46,7 +47,7 @@ class Json_config(object):
 
         if self.action == "install" or self.action == "init":
             self.json_config = config_tmp
-        elif self.action == "add_compute":
+        elif self.action in ["add_compute", "reinstall_init", "add_storage"]:
             self.new_node_hostnames = []
             conn = DB_conn(dbname=DBNAME)
             sql = """ select value from global_options where name='json_conf'; """
@@ -54,7 +55,13 @@ class Json_config(object):
             pickled_config = conn.cursor.fetchone()
             self.json_config = pickle.loads(str(pickled_config[0]))
             for node in deploy_conf["nodes"]:
-                if node not in self.json_config["deploy_conf"]["nodes"]:
+                existed = False
+                for existed_node in self.json_config["deploy_conf"]["nodes"]:
+                    if node["hostname"] == existed_node["hostname"]:
+                        existed = True
+                if not existed:
+                    if "osd" in node["node_role"]:
+                        self.need_updatedb = True
                     self.json_config["deploy_conf"]["nodes"].append(node)
                     self.new_node_hostnames.append(node['hostname'])
                 self.new_node.append(node)
@@ -73,6 +80,9 @@ class Json_config(object):
             if len(node["mg_net"]["ip"]) > 0:
                 if not self.get_reachable(node["mg_net"]["ip"]):
                     self.json_config["deploy_conf"]["nodes"].remove(node)
+            elif len(node["storage_net"]["ip"]) > 0:
+                if not self.get_reachable(node["storage_net"]["ip"]):
+                    self.json_config["deploy_conf"]["nodes"].remove(node)
 
         deploy_conf = self.json_config["deploy_conf"]
         self.nodes = deploy_conf["nodes"]
@@ -86,11 +96,24 @@ class Json_config(object):
         self.enable_compute_ha = deploy_conf["enable_compute_ha"]
         self.controller_vip = deploy_conf["controller_vip"]
         self.node_info_all = []
-        self.controller_list, self.compute_list,self.storage_node_list = self._get_node_list(self.nodes)
+        self.controller_list, self.compute_list,self.storage_node_list,self.neutron_list = self._get_node_list(self.nodes)
         if len(self.controller_list) >= 3:
             self.ha_enabled = True
         else:
             self.ha_enabled = False
+
+        if len(self.neutron_list) >=3:
+            self.neutron_ha_enabled = True
+        else:
+            self.neutron_ha_enabled = False
+
+        if deploy_conf.get("neutron_vhostname_short"):
+            self.neutron_vhostname_short = deploy_conf.get["neutron_vhostname_short"]
+            self.neutron_master_node = self.neutron_list[0]["hostname"]
+        else:
+            self.neutron_vhostname_short = "\"{{ controller_vhostname_short }}\""
+            self.neutron_master_node = self.neutron_vhostname_short
+
         self.ansible_vars = {}
 
 
@@ -98,6 +121,7 @@ class Json_config(object):
         controller_list = []
         compute_list = []
         storage_node_list = []
+        neutron_list = []
         loop = 1
         vpn_subnet = VPN_NET_START
         for node in nodes:
@@ -126,6 +150,10 @@ class Json_config(object):
             sto_port =       node["storage_net"]["port"]
             sto_ip =         node["storage_net"]["ip"]
             sto_netmask =    node["storage_net"]["netmask"]
+            if sto_ip != None and len(sto_ip) > 0:
+                self.sto_net = IP(sto_ip).make_net(sto_netmask)
+            else:
+                self.sto_net = ""
     
             sto_internal_ip =         node["storage_internal_net"]["ip"]
             sto_internal_netmask =    node["storage_internal_net"]["netmask"]
@@ -136,7 +164,7 @@ class Json_config(object):
                 cluster_ip = mg_ip
                 cluster_netmask = mg_netmask
 
-            if "controller" in node_role:
+            if "neutron" in node_role or "controller" in node_role:
                 self.cluster_net = IP(cluster_ip).make_net(cluster_netmask)
                 self.vip_netmask = cluster_netmask
                 vpn_ip_seg = vpn_subnet
@@ -182,10 +210,12 @@ class Json_config(object):
                 controller_list.append(node_summary)
             if "compute" in node_role:
                 compute_list.append(node_summary)
+            if "neutron" in node_role:
+                neutron_list.append(node_summary)
             if "osd" in node_role:
                 storage_node_list.append(node_summary)
     
-        return controller_list,compute_list,storage_node_list
+        return controller_list,compute_list,storage_node_list,neutron_list
 
     def get_reachable(self, ip):
         if not subprocess.call("ping "+ip+" -c10 -i 0.1", shell=True):
@@ -202,6 +232,10 @@ class Json_config(object):
         self.ansible_vars['deploy_ip_mg'] = self.deploy_ip_mg
         self.ansible_vars['deploy_ip_sto'] = self.deploy_ip_sto
         self.ansible_vars['cluster_net'] = self.cluster_net
+        if len(self.sto_net) > 0:
+            self.ansible_vars['sto_net'] = self.sto_net
+        else:
+            self.ansible_vars['sto_net'] = ""
         if self.ha_enabled:
             self.ansible_vars['vip'] = self.controller_vip
         else:
@@ -212,34 +246,38 @@ class Json_config(object):
         self.ansible_vars['domain'] = self.domain
         self.ansible_vars['default_password'] = DEFAULT_PASSWORD
         self.ansible_vars['controllers'] = json.dumps(self.controller_list)
+        self.ansible_vars['neutrons'] = json.dumps(self.neutron_list)
         self.ansible_vars['computes'] = json.dumps(self.compute_list)
         self.ansible_vars['ceph_nodes'] = json.dumps(self.storage_node_list)
         self.ansible_vars['nova_storage_type'] = json.dumps(self.nova_storage_type)
         self.ansible_vars['enable_compute_ha'] = json.dumps(self.enable_compute_ha)
         self.ansible_vars['ha_enabled'] = self.ha_enabled
+        self.ansible_vars['neutron_ha_enabled'] = self.neutron_ha_enabled
         self.ansible_vars['action_type'] = self.action
         self.ansible_vars['master_node'] = self.master_node
+        self.ansible_vars['neutron_vhostname_short'] = self.neutron_vhostname_short
+        self.ansible_vars['neutron_master_node'] = self.neutron_master_node
 
     def write_conf(self):
         # write group_vars/all
         with open(ANSIBLE_PATH+"/group_vars/"+GROUP_VARS_FILE, 'w') as f:
             for key in self.ansible_vars.keys():
                 f.write(key+": "+str(self.ansible_vars[key])+"\n")
-        if self.action in ["install", "add_compute"]:
+        if self.action in ["install", "add_compute", "recover_controller", "reinstall_init"]:
             with open(ANSIBLE_PATH+"/keys.yml", 'w') as f:
                 if self.action == "install":
                     self.ansible_vars['openstack_key'] = str(uuid.uuid4()).replace("-","")[:16]
                     if "ceph" in self.nova_storage_type:
                         try:
                             self.ansible_vars['ceph_uuid'] = str(uuid.uuid4())
-                            p = subprocess.Popen("cat "+CEPHFILE_PATH+"/client.ceph.keyring|grep key|awk -F ' = ' '{print $2}'", \
+                            p = subprocess.Popen("cat "+CEPHFILE_PATH+"/client.cephe3c.keyring|grep key|awk -F ' = ' '{print $2}'", \
                                             shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                             self.ansible_vars['ceph_key'] = p.stdout.readlines()[0].strip()
                         except Exception as e:
                             raise e
                         f.write("ceph_uuid: "+self.ansible_vars['ceph_uuid']+"\nceph_key: "+self.ansible_vars['ceph_key']+"\n")
 
-                elif self.action == "add_compute":
+                elif self.action in ["add_compute", "recover_controller", "reinstall_init"]:
                     conn = DB_conn(dbname=DBNAME)
                     if "ceph" in self.nova_storage_type:
                         keys = ["openstack_key", "ceph_key", "ceph_uuid"]
@@ -282,10 +320,18 @@ class Json_config(object):
             for node in self.compute_list:
                 f.write(node['hostname']+"\n")
 
+            f.write("[neutron]\n")
+            for node in self.neutron_list:
+                f.write(node['hostname']+"\n")
+
             if len(self.new_node) > 0:
                 f.write("[new_node]\n")
                 for node in self.new_node:
                     f.write(node['hostname']+"\n")
+                f.write("[new_node_neutron]\n")
+                for node in self.new_node:
+                    if "neutron" in node["node_role"]:
+                        f.write(node['hostname']+"\n")
                 f.write("[new_node_compute]\n")
                 for node in self.new_node:
                     if "compute" in node["node_role"]:
@@ -441,8 +487,9 @@ class Json_config(object):
         else:
             global_options['ctl_ha'] = "False"
         global_options['json_conf'] = pickle.dumps(self.json_config)
-        global_options['ceph_uuid'] = self.ansible_vars['ceph_uuid']
-        global_options['ceph_key'] = self.ansible_vars['ceph_key']
+        if "ceph" in self.nova_storage_type:
+            global_options['ceph_uuid'] = self.ansible_vars['ceph_uuid']
+            global_options['ceph_key'] = self.ansible_vars['ceph_key']
         global_options['openstack_key'] = self.ansible_vars['openstack_key']
         for key in global_options.keys():
             if key == "storage_type":
@@ -463,7 +510,7 @@ class Json_config(object):
                 subprocess.Popen("scp -r root@"+node['mg_ip']+":/etc/corosync/corosync.conf /tmp/", shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                 break
 
-class operator(E3c_daemon):
+class e3c_operator(E3c_daemon):
     def __init__(self, name, save_path, stdin=os.devnull, stdout=os.devnull, stderr=os.devnull, home_dir='.', umask=022, verbose=1):
         E3c_daemon.__init__(self, save_path, stdin, stdout, stderr, home_dir, umask, verbose)
         self.name = name
@@ -545,6 +592,20 @@ class operator(E3c_daemon):
             json_conf.fetch_key_files()
             self.run_ansible(ANSIBLE_PATH+"/inventory/all", json_conf.action, sock)
 
+        if json_conf.action == "reinstall_init":
+            json_conf.get_json_vars()
+            json_conf.write_conf()
+            json_conf.ssh_prepare()
+            self.run_ansible(ANSIBLE_PATH+"/inventory/all", json_conf.action, sock)
+            if json_conf.need_updatedb:
+                json_conf.update_global_option()
+                json_conf.update_node_network()
+
+        if json_conf.action == "add_storage":
+            json_conf.get_json_vars()
+            json_conf.update_global_option()
+            json_conf.update_node_network()
+            
         if json_conf.action in ["install", "recover_controller"]:
             import ast
             if json_conf.ha_enabled:
@@ -557,7 +618,9 @@ class operator(E3c_daemon):
             ssh_conn.set_missing_host_key_policy(key)
             ssh_conn.connect(ssh_target, 22, 'root', timeout=30)
             try:
+                time.sleep(20)
                 stdin, stdout, stderr = ssh_conn.exec_command(ssh_cmd)
+                print "run command \"%s\" on %s" % (ssh_cmd, ssh_target)
             except Exception as e:
                 print stderr
                 raise e

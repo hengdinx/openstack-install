@@ -1,0 +1,43 @@
+---
+# tasks file for openstack_network
+
+- name: modify /etc/haproxy/haproxy.cfg
+  blockinfile:
+    path: /etc/haproxy/haproxy.cfg
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR NEUTRON"
+    block: |
+      listen neutron_api_cluster
+          bind {{ neutron_vhostname }}:9696
+          balance  source
+          option  tcpka
+          option  httpchk
+          option  tcplog
+          {% for i in neutrons %}
+          server {{ i['hostname'] }} {{ i['cluster_ip'] }}:9696 check inter 2000 rise 2 fall 5
+          {% endfor %}
+  when: 'ha_enabled == True'
+
+- name: config /etc/nova/nova.conf for openstack_network
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: neutron, option: url, value: "http://{{ neutron_vhostname }}:9696" }
+    - { section: neutron, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: neutron, option: auth_type, value: password }
+    - { section: neutron, option: project_domain_name, value: default }
+    - { section: neutron, option: user_domain_name, value: default }
+    - { section: neutron, option: region_name, value: "{{ region_name }}" }
+    - { section: neutron, option: project_name, value: service }
+    - { section: neutron, option: username, value: neutron }
+    - { section: neutron, option: password, value: "{{ openstack_neutron_password }}" }
+
+- include: nova_pcs_restart.yml
+  run_once: yes
+  delegate_to: '{{ master_node }}'
+  when: 'ha_enabled and "controller" in my_role'
+
+- include: nova_service_restart.yml
+  when: 'ha_enabled == False or "controller" not in my_role'

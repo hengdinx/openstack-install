@@ -1,0 +1,35 @@
+---
+
+- name: cleanup mistral resource
+  shell: 'pcs resource delete {{ item }}'
+  with_items:
+    - openstack-mistral-api
+    - openstack-mistral-engine
+    - openstack-mistral-executor
+  register: result
+  failed_when: result.rc != 0 and "does not exist" not in result.stderr
+
+- name: create mistral resource
+  shell: 'pcs resource create {{ item }} systemd:{{ item }} --clone interleave=true op start interval="0" timeout="300s" op stop interval="0" timeout="300s"'
+  with_items:
+    - openstack-mistral-api
+    - openstack-mistral-engine
+    - openstack-mistral-executor
+
+- name: wait until mistral start
+  shell: 'pcs status|grep -A 1 {{ item }}'
+  register: result
+  retries: 5
+  delay: 10
+  until: '"Started" in result.stdout'
+  with_items:
+    - openstack-mistral-api
+    - openstack-mistral-engine
+    - openstack-mistral-executor
+
+- name: restart haproxy and httpd
+  shell: "pcs resource restart {{ item }}"
+  with_items:
+    - haproxy
+    - httpd-clone
+

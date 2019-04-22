@@ -1,0 +1,4 @@
+---
+
+- name: uncompress icon files
+  shell: "tar -zxf /tmp/oem_resource.tar.gz -C /tmp/; cd /tmp/static; find . -type f -exec cp '{}' /opt/zero/static/'{}' ';' "

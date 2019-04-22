@@ -1,0 +1,4 @@
+---
+
+- name: uncompress icon files
+  shell: 'tar -zxf /tmp/download_files.tar.gz -C /var/lib/zero/OTC/download'

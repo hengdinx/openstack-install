@@ -1,0 +1,92 @@
+########################################################################################################
+#  AIO config
+########################################################################################################
+#version:                        'V4.1.4-7/20180914'
+#client_version:                 'V4.1'
+#
+#deploy_hostname:                'deploy-master'
+#deploy_ip:                      '10.10.40.201'
+#cluster_net:                    '10.10.40.0/24'
+#
+#vip:                            '10.10.40.10'
+#controller_vhostname:           'controller'
+#vip_netmask:                    '255.255.255.0'
+#vip_prefix:                     24
+#domain:                         'hatest'
+#default_password:               'qwer1234'
+#
+#controllers:
+#  - { hostname: controller1, mg_ip: 10.10.40.11, cluster_ip: 10.10.40.11, domain: hatest, id: 1 }
+#computes:
+#  - { hostname: compute1, mg_ip: 10.10.40.14, cluster_ip: 10.10.40.14, domain: hatest }
+#
+#controller_hostname_list:       "{{ controllers|selectattr('mg_ip')|map(attribute='hostname')|list }}"
+#controller_mg_ip_list:          "{{ controllers|selectattr('hostname')|map(attribute='mg_ip')|list }}"
+#controller_cluster_ip_list:     "{{ controllers|selectattr('hostname')|map(attribute='cluster_ip')|list }}"
+#
+#compute_hostname_list:          "{{ computes|selectattr('mg_ip')|map(attribute='hostname')|list }}"
+#
+#rabbitmq_master_hostname:       '{{ controllers[0]["hostname"] }}'
+#rabbitmq_master_ip:             '{{ controllers[0]["cluster_ip"] }}'
+#openstack_rabbitmq_password:    'qwer1234'
+#
+#mysql_master_hostname:          '{{ controllers[0]["hostname"] }}'
+#mysql_master_ip:                '{{ controllers[0]["cluster_ip"] }}'
+#mysql_cluster_name:             'mysql_cluster'
+#wsrep_sst_username:             'mysql-cluster'
+#wsrep_sst_password:             '111111'
+#mysql_root_password:            'qwer1234'
+#hacluster_pass:                 'hacluster'
+#port_mysql:                     '3306'
+#
+#os_token:                       '055136e0cdd58f6bdd37'
+#mysql_keystone_password:        '{{ default_password }}'
+#
+#openstack_admin_password:            '11111111'
+#openstack_nova_password:             '{{ default_password }}'
+#openstack_glance_password:           '{{ default_password }}'
+#openstack_cinder_password:           '{{ default_password }}'
+#openstack_neutron_password:          '{{ default_password }}'
+#openstack_placement_password:        '{{ default_password }}'
+#openstack_apiadmin_password:         '{{ default_password }}'
+#
+#metadata_proxy_shared_secret:   '{{ default_password }}'
+#region_name:                    'RegionOne'
+#
+#mysql_zabbix_user:              'zabbixsrv'
+#mysql_zabbix_password:          '{{ default_password }}'
+#
+#mysql_cmp_user:                 'cmp'
+#mysql_cmp_password:             '{{ default_password }}'
+#
+#mysql_lbs_user:                 'lbs'
+#mysql_lbs_password:             '{{ default_password }}'
+
+
+
+
+########################################################################################################
+#  HA config
+########################################################################################################
+
+version:                        'V4.1.4-7/20180914'
+client_version:                 'V4.1'
+
+deploy_hostname:                'deploy-master'
+deploy_ip:                      '10.10.40.201'
+cluster_net:                    '10.10.40.0/24'
+
+vip:                            '10.10.40.10'
+controller_vhostname:           'controller'
+vip_netmask:                    '255.255.255.0'
+vip_prefix:                     24
+domain:                         'hatest'
+default_password:               'qwer1234'
+
+controllers:
+  - { hostname: controller1, mg_ip: 10.10.40.11, cluster_ip: 10.10.40.11, sto_ip: "", domain: hatest, id: 1 }
+  - { hostname: controller2, mg_ip: 10.10.40.12, cluster_ip: 10.10.40.12, sto_ip: "", domain: hatest, id: 2 }
+  - { hostname: controller3, mg_ip: 10.10.40.13, cluster_ip: 10.10.40.13, sto_ip: "", domain: hatest, id: 3 }
+computes:
+  - { hostname: compute1, mg_ip: 10.10.40.14, cluster_ip: 10.10.40.14, sto_ip: "", domain: hatest }
+  - { hostname: compute2, mg_ip: 10.10.40.15, cluster_ip: 10.10.40.15, sto_ip: "", domain: hatest }

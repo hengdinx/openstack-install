@@ -3,13 +3,44 @@
 #- name: render /etc/hosts
 #  template: src=hosts.j2 dest=/etc/hosts
 
+
+- name: install basic packages for controller nodes
+  yum: name={{ item }} state=latest
+  with_items:
+    - httpd
+    - libnghttp2
+    - mod_http2
+    - python-httplib2
+    - mod_ssl
+    - ceph-common
+  when: '["controller", "compute", "neutron"]|intersect(my_role) != []'
+
+- name: install basic packages for controller nodes
+  yum: name={{ item }} state=latest
+  with_items:
+    - iptables-services
+
+- name: install glusterfs with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - glusterfs
+    - glusterfs-server
+    - glusterfs-coreutils
+  when: '["controller", "compute"]|intersect(my_role) != []'
+
+- name: set iptables
+  copy: src=iptables dest=/etc/sysconfig/iptables
+
+- name: restart iptables
+  service: name=iptables state=restarted enabled=yes
+
 - block:
   - name: remove /etc/httpd/conf.d/wsgi-keystone.conf
     file: path=/etc/httpd/conf.d/wsgi-keystone.conf state=absent
   
   - name: start httpd service
     service: name=httpd state=started enabled=yes
-  when: 'action_type == "install" or action_type == "init"'
+  when: 'action_type == "install" or action_type == "init" and "controller" in my_role' 
 
 #- name: modify /etc/hosts
 #  blockinfile:
@@ -33,30 +64,3 @@
 #     {% if i['cluster_ip'] != None and i['cluster_ip'] != "" %}{{ i['cluster_ip'] }}{% elif i['sto_ip'] != None and i['sto_ip'] != "" %}{{ i['sto_ip'] }}{% endif %} {{ i['hostname'] }} {{ i['hostname'] }}.{{ i['domain'] }}
 #     {% endfor %}
 #     {{ vip }} {{ controller_vhostname }}
-
-- name: set hostname for nodes
-  command: "hostnamectl set-hostname {{ hostname }}.{{ domain }}"
-
-- name: stop services
-  service:
-    name: "{{ item }}"
-    state: stopped
-    enabled: no
-  with_items:
-    - NetworkManager
-    - firewalld
-
-- name: set selinux config
-  lineinfile:
-    path: /etc/selinux/config
-    regexp: '^SELINUX='
-    line: 'SELINUX=disabled'
-
-- name: disable selinux
-  selinux: state=disabled
-
-- name: set iptables
-  copy: src=iptables dest=/etc/sysconfig/iptables
-
-- name: restart iptables
-  service: name=iptables state=restarted enabled=yes

@@ -55,6 +55,8 @@
     - libvirt-daemon-driver-storage-scsi
     - libvirt-daemon-kvm
     - libvirt-libs
+    - libvirt-python
+    - python-rbd
 
 - name: enable login for nova user and set password
   user: name=nova password={{ nova_password |password_hash('sha512') }} generate_ssh_key=yes home=/home/nova shell=/bin/bash
@@ -69,12 +71,14 @@
 - name: config /etc/nova/nova.conf for controller
   ini_file:
     path: /etc/nova/nova.conf
+    mode: 0666
     section: "{{ item.section }}"
     option: "{{ item.option }}"
     value: '{{ item.value }}'
   with_items:
     - { section: DEFAULT, option: osapi_compute_listen, value: "{{ cluster_ip }}" }
     - { section: DEFAULT, option: metadata_listen, value: "{{ cluster_ip }}" }
+    - { section: DEFAULT, option: reclaim_instance_interval, value: 0 }
     - { section: api_database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/nova_api" }
     - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/nova" }
     - { section: api, option: auth_strategy, value: keystone }
@@ -146,7 +150,6 @@
     with_items:
       - { user: apiadmin, project: admin }
       - { user: nova, project: service }
-      - { user: nova, project: admin }
       - { user: placement, project: service }
 
   #- debug: var=raresult #.results[0]["failed"]

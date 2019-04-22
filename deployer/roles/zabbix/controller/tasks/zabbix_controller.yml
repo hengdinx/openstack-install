@@ -8,7 +8,10 @@
     - zabbix22-server
     - zabbix22-web
     - zabbix22-agent
-    - mp-utils
+    - e3c-mp-utils
+    - sane-backends
+    - sane-backends-libs
+    - gvfs-gphoto2
 
 - name: cleanup config directories
   file: path={{ item }} state=absent
@@ -81,7 +84,8 @@
     - zabbix22-server
     - zabbix22-web
     - zabbix22-agent
-    - mp-utils
+    - e3c-mp-utils
+    - php-mysqlnd
 
 - name: render /etc/php.ini
   ini_file:

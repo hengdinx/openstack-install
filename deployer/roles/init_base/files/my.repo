@@ -1,5 +1,0 @@
-[myyum]
-name=myyum
-baseurl=http://deployer/zero
-enabled=1
-gpgcheck=0

@@ -1,0 +1,15 @@
+[DEFAULT]
+bind_host = 0.0.0.0
+bind_port = 8201
+osauth_file = /opt/zero/admin-openrc.sh
+log_file = /var/log/e3c/e3c-vpns.log
+ssh_user = root
+debug = False
+
+[database]
+host = {{ controller_vhostname }}
+port = 3306
+username = root
+password = qwer1234
+dbname = e3c_vpns
+

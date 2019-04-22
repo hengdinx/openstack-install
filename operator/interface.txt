@@ -2,7 +2,7 @@
 "deploy_ip_mg": "10.10.40.11",
 "deploy_ip_sto": "",
 "deploy_netmask": "255.255.255.0",
-"action_type": "install",
+"action_type": "init",
 "domain": "hatest",
 "controller_vip": "10.10.40.10",
 "gateway": "10.10.40.254",
@@ -10,7 +10,7 @@
 {
 "hostname": "controller1",
 "root_password": "1",
-"node_role":["controller", "neutron"],
+"node_role":["controller"],
 "mg_net":{
 "port":"eth0",
 "ip":"10.10.40.11",
@@ -45,7 +45,7 @@
  {
 "hostname": "controller2",
 "root_password": "1",
-"node_role":["controller", "neutron"],
+"node_role":["controller"],
 "mg_net":{
 "port":"eth0",
 "ip":"10.10.40.12",
@@ -77,13 +77,48 @@
 "netmask":""
 }
 },
- {
+{
 "hostname": "controller3",
 "root_password": "1",
-"node_role":["controller", "neutron", "compute"],
+"node_role":["controller", "compute"],
 "mg_net":{
 "port":"eth0",
 "ip":"10.10.40.13",
+"netmask":"255.255.255.0"
+},
+"tenant_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"storage_internal_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"ex_net":{
+"port":"",
+"ip":"",
+"netmask":""
+},
+"cluster_net":{
+"port":"",
+"ip":"",
+"netmask":""
+}
+},
+{
+"hostname": "neutron1",
+"root_password": "1",
+"node_role":["neutron"],
+"mg_net":{
+"port":"eth0",
+"ip":"10.10.40.14",
 "netmask":"255.255.255.0"
 },
 "tenant_net":{

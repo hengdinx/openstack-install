@@ -20,6 +20,26 @@
 - name: restart sshd
   service: name=sshd state=restarted enabled=yes
 
+- name: set hostname for nodes
+  command: "hostnamectl set-hostname {{ hostname }}.{{ domain }}"
+
 - name: render /etc/hosts
   template: src=hosts.j2 dest=/etc/hosts
 
+- name: stop services
+  service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  with_items:
+    - NetworkManager
+    - firewalld
+
+- name: set selinux config
+  lineinfile:
+    path: /etc/selinux/config
+    regexp: '^SELINUX='
+    line: 'SELINUX=disabled'
+
+- name: disable selinux
+  selinux: state=disabled

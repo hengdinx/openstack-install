@@ -19,6 +19,11 @@
 {{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
 {% endif %}
 {% endfor %}
+{% for i in neutrons %}
+{% if i['hostname'] not in controller_hostname_list %}
+{{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
+{% endif %}
+{% endfor %}
 {% for i in ceph_nodes %}
 {% if i['hostname'] not in controller_hostname_list and i['hostname'] not in compute_hostname_list %}
 {% if i['cluster_ip'] != None and i['cluster_ip'] != "" %}{{ i['cluster_ip'] }}{% elif i['sto_ip'] != None and i['sto_ip'] != "" %}{{ i['sto_ip'] }}{% endif %} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}

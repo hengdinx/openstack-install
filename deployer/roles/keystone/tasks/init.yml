@@ -43,6 +43,9 @@
     - user
     - teacher
     - office
+    - sysadmin
+    - secadmin
+    - auditadmin
   register: result
   until: not result.failed
   retries: 5
@@ -62,11 +65,36 @@
     - { user: glance, password: "{{ openstack_glance_password }}" }
     - { user: placement, password: "{{ openstack_placement_password }}" }
     - { user: apiadmin, password: "{{ openstack_apiadmin_password }}" }
+    - { user: mistral, password: "{{ openstack_mistral_password }}" }
 
 - name: create group_root
   os_group:
     cloud: admin_cloud
     state: present
-    name: group_root
-    description: "Group Root"
+    name: "{{ item.name }}"
+    description: "{{ item.description }}"
+  with_items:
+    - { name: group_root, description: "Group Root" }
+    - { name: admin, description: "Group Admin" }
 
+- name: get admin_uuid
+  shell: "openstack role show  -f value admin -c id --os-cloud admin_cloud"
+  register: admin_uuid
+
+- name: get sysadmin_uuid
+  shell: "openstack role show  -f value sysadmin -c id --os-cloud admin_cloud"
+  register: sysadmin_uuid
+
+- name: get secadmin_uuid
+  shell: "openstack role show  -f value secadmin -c id --os-cloud admin_cloud"
+  register: secadmin_uuid
+
+- name: set implies for admin and sysadmin
+  shell: 'curl -X PUT  -H "X-Auth-Token: {{ os_token }}" -H "Content-type: application/json" http://{{ controller_vhostname }}:5000/v3/roles/{{ sysadmin_uuid.stdout }}/implies/{{ admin_uuid.stdout }}'
+  register: result
+  failed_when: 'result.rc != 0 or "error" in result.stdout'
+
+- name: set implies for admin and secadmin
+  shell: 'curl -X PUT  -H "X-Auth-Token: {{ os_token }}" -H "Content-type: application/json" http://{{ controller_vhostname }}:5000/v3/roles/{{ secadmin_uuid.stdout }}/implies/{{ admin_uuid.stdout }}'
+  register: result
+  failed_when: 'result.rc != 0 or "error" in result.stdout'

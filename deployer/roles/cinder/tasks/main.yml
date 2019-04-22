@@ -26,7 +26,7 @@
     - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
     - { section: DEFAULT, option: my_ip, value: "{{ cluster_ip }}" }
     - { section: DEFAULT, option: auth_strategy, value: keystone }
-    - { section: DEFAULT, option: rpc_backend, value: rpc_backend }
+    - { section: DEFAULT, option: rpc_backend, value: rabbit }
     - { section: DEFAULT, option: control_exchange, value: cinder }
     - { section: DEFAULT, option: glance_api_servers, value: "http://{{ controller_vhostname }}:9292" }
     - { section: key_manager, option: fixed_key, value: "{{ openstack_key }}" }
@@ -126,22 +126,22 @@
   - include: cinder_service_restart.yml
     when: ha_enabled == False
 
-  - name: add type lvm
-    environment:
-      OS_PASSWORD: "{{ openstack_admin_password }}"
-      OS_USERNAME: admin
-      OS_URL: "http://{{ controller_vhostname }}:35357/v3"
-      OS_IDENTITY_API_VERSION: 3
-      OS_AUTH_URL: "http://{{ controller_vhostname }}:5000/v3"
-      OS_USER_DOMAIN_NAME: Default
-      OS_PROJECT_NAME: admin
-      OS_PROJECT_DOMAIN_NAME: Default
-    command: "cinder type-create lvm"
-    register: result
-    until: result.rc == 1 or result.rc == 0
-    retries: 5
-    delay: 10
-    failed_when: result.rc != 1 and result.rc != 0
+  #- name: add type lvm
+  #  environment:
+  #    OS_PASSWORD: "{{ openstack_admin_password }}"
+  #    OS_USERNAME: admin
+  #    OS_URL: "http://{{ controller_vhostname }}:35357/v3"
+  #    OS_IDENTITY_API_VERSION: 3
+  #    OS_AUTH_URL: "http://{{ controller_vhostname }}:5000/v3"
+  #    OS_USER_DOMAIN_NAME: Default
+  #    OS_PROJECT_NAME: admin
+  #    OS_PROJECT_DOMAIN_NAME: Default
+  #  command: "cinder type-create lvm"
+  #  register: result
+  #  until: result.rc == 1 or result.rc == 0
+  #  retries: 5
+  #  delay: 10
+  #  failed_when: result.rc != 1 and result.rc != 0
 
   - name: add type-key
     environment:

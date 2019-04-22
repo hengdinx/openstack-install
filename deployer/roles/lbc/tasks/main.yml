@@ -1,21 +1,22 @@
 ---
 # tasks file for lbc
-
-- name: install lbc with yum
-  yum: name=lbc state=latest
-
-- name: config /opt/lbc/lbc.ini
-  ini_file:
-    path: /opt/lbc/lbc.ini
-    section: "{{ item.section }}"
-    option: "{{ item.option }}"
-    value: '{{ item.value }}'
-    mode: 0755
-  with_items:
-    - { section: lbc, option: db_ip, value: "{{ vip }}" }
-    - { section: lbc, option: db_user, value: "{{ mysql_lbs_user }}" }
-    - { section: lbc, option: db_passwd, value: "{{ mysql_lbs_password }}" }
-    - { section: lbc, option: local_ip, value: "{{ cluster_ip }}" }
-
-- name: start and enable lbc
-  service: name=lbc state=stopped enabled=no
+- block:
+  - name: install lbc with yum
+    yum: name=lbc state=latest
+  
+  - name: config /opt/lbc/lbc.ini
+    ini_file:
+      path: /opt/lbc/lbc.ini
+      section: "{{ item.section }}"
+      option: "{{ item.option }}"
+      value: '{{ item.value }}'
+      mode: 0755
+    with_items:
+      - { section: lbc, option: db_ip, value: "{{ vip }}" }
+      - { section: lbc, option: db_user, value: "{{ mysql_lbs_user }}" }
+      - { section: lbc, option: db_passwd, value: "{{ mysql_lbs_password }}" }
+      - { section: lbc, option: local_ip, value: "{{ cluster_ip }}" }
+  
+  - name: start and enable lbc
+    service: name=lbc state=stopped enabled=no
+  when: '"compute" in my_role and "controller" not in my_role'

@@ -1,0 +1,4 @@
+---
+
+- name: bootstrap mysql cluster on first node
+  service: name=mariadb state=started enabled=true

@@ -14,6 +14,9 @@
     line: "SYSLOGD_OPTIONS=\"-c 2 -r -m 0\""
   notify: restart rsyslog
 
+- name: copy perm file
+  copy: src=e3cloud.pem dest=/etc/ssl/certs/e3cloud.pem
+
 - name: render haproxy.cfg
   template: src=haproxy.cfg.j2 dest=/etc/haproxy/haproxy.cfg
 

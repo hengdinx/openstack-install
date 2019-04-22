@@ -16,6 +16,8 @@
     - mysql
     - MySQL-python
     - mariadb-config
+    - mariadb
+    - mariadb-server
 
 - name: clean up database and config files
   file: path={{ item }} state=absent
@@ -33,6 +35,13 @@
     - galera
     - MySQL-python
 
+- name: install MariaDB with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - mariadb
+    - mariadb-server
+    - MySQL-python
+
 - name: render server.conf
   template: src=server.conf.j2 dest=/etc/my.cnf
 
@@ -47,8 +56,20 @@
     - { option: max_connections, value: 10000 }
     #- { option: default_authentication_plugin, value: mysql_native_password }
 
-- name: bootstrap mysql cluster on first node
-  shell: service mysql start
+- name: add openfile limit in service config
+  ini_file:
+    path: /usr/lib/systemd/system/mariadb.service
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: Service, option: LimitNOFILE, value: 50000 }
+
+- name: reload daemon to ensure config take effect
+  systemd:
+    daemon_reload: yes
+
+- include: "bootstrap.yml"
 
 - name: wait for service start
   wait_for: host={{ vip }} port=3306

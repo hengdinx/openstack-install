@@ -1,0 +1,23 @@
+
+- hosts: localhost
+  gather_facts: False
+  roles:
+    - init_local
+  vars_files:
+    - default.yml
+
+- hosts: all
+  gather_facts: False
+  roles:
+    - config_ssh
+    - ntp
+  vars_files:
+    - default.yml
+
+- hosts: new_node
+  gather_facts: False
+  roles:
+    - init_base
+    - network
+  vars_files:
+    - default.yml

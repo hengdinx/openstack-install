@@ -1,8 +1,5 @@
 # controller init
 
-- name: remove /etc/httpd/conf.d/wsgi-keystone.conf
-  file: path=/etc/httpd/conf.d/wsgi-keystone.conf state=absent
-
 - name: update sysctl
   sysctl: name={{ item.name }} value={{ item.value }} reload=yes
   with_items:
@@ -19,5 +16,11 @@
 
 - name: change mode for mail.rc
   file: path=/etc/mail.rc mode=777
+
+- name: create /etc/openstack dir
+  file: path=/etc/openstack state=directory
+
+- name: render clouds.yaml
+  template: src=clouds.yaml.j2 dest=/etc/openstack/clouds.yaml
 
 - include: openstacksdk.yml

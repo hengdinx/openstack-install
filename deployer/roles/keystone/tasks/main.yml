@@ -87,9 +87,13 @@
     - { section: oslo_messaging_rabbit, option: rabbit_max_retries, value: 2 }
     - { section: oslo_messaging_rabbit, option: heartbeat_timeout_threshold, value: 0 }
     - { section: oslo_messaging_rabbit, option: rabbit_durable_queues, value: false }
+    - { section: assignment, option: prohibited_implied_role, value: "" }
 
 - name: remove verbose option in keystone.conf
   ini_file: path=/etc/keystone/keystone.conf section=DEFAULT option=verbose state=absent
+
+- name: modify /etc/keystone/policy.json
+  shell: "sed -i 's/\"identity:update_user\": \"rule:admin_required\"/\"identity:update_user\": \"rule:admin_or_owner\"/g' /etc/keystone/policy.json"
 
 - name: render keystonerc_admin
   template: src=keystonerc_admin.j2 dest=/root/keystonerc_admin
@@ -130,7 +134,7 @@
     command: keystone-manage credential_setup --keystone-user keystone --keystone-group keystone
   
   - name: keystone bootstrap
-    command: keystone-manage bootstrap --bootstrap-password {{ openstack_admin_password }} --bootstrap-admin-url http://{{ vip }}:35357/v3/ --bootstrap-internal-url http://{{ vip }}:5000/v3/ --bootstrap-public-url http://{{ vip }}:5000/v3/ --bootstrap-region-id {{ region_name }}
+    command: keystone-manage bootstrap --bootstrap-password {{ openstack_admin_password }} --bootstrap-admin-url http://{{ controller_vhostname }}:35357/v3/ --bootstrap-internal-url http://{{ controller_vhostname }}:5000/v3/ --bootstrap-public-url http://{{ controller_vhostname }}:5000/v3/ --bootstrap-region-id {{ region_name }}
     register: result
     until: result.rc == 0
     retries: 5
@@ -156,19 +160,13 @@
     service: name=httpd state=restarted enabled=yes
     when: ha_enabled == False
   
-  - name: create /etc/openstack dir
-    file: path=/etc/openstack state=directory
-
-  - name: render clouds.yaml
-    template: src=clouds.yaml.j2 dest=/etc/openstack/clouds.yaml
-
 # before run this step need to install python-pip first, then copy openstacksdk and dependent packages to remote
 # install tar.gz and whl packages with pip install command.
   - include: init.yml
-    environment:
-      OS_TOKEN: "{{ os_token }}"
-      OS_URL: "http://{{ controller_vhostname }}:35357/v3"
-      OS_IDENTITY_API_VERSION: 3
+    #environment:
+    #  OS_TOKEN: "{{ os_token }}"
+    #  OS_URL: "http://{{ controller_vhostname }}:35357/v3"
+    #  OS_IDENTITY_API_VERSION: 3
   run_once: true
   delegate_to: "{{ master_node }}"
   when: 'action_type == "install"'

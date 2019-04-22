@@ -6,7 +6,7 @@
 -I INPUT -p tcp -m multiport --dport 8300,8301,8302,8500,8501,8600 -j ACCEPT
 -I INPUT -p tcp -m multiport --dport 3260,3306,5000,5666,5672,6082 -j ACCEPT
 -I INPUT -p tcp -m multiport --dport 6789,8100,8102,8200,8201,8774,8776,8778,9002,9191,9292,9696 -j ACCEPT
--I INPUT -p tcp -m multiport --dport 10001,10050,10051,10114,10115,10144,11211,16509,20000,20001,49152,35357 -j ACCEPT
+-I INPUT -p tcp -m multiport --dport 10001,10050,10051,10114,10115,10144,11211,16509,20000,20001,49152,35357,9090 -j ACCEPT
 -I INPUT -p tcp -m multiport --dport 5900:6100 -j ACCEPT
 -I INPUT -p tcp -m multiport --dport 6800:7300 -j ACCEPT
 -I INPUT -p tcp -m multiport --dport 49142:49216 -j ACCEPT

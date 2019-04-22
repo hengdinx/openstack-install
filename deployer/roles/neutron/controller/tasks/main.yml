@@ -16,7 +16,7 @@
       - neutron-metadata-agent
     register: result
     failed_when: result.rc != 0 and "does not exist" not in result.stderr
-    when: ha_enabled == True
+    when: neutron_ha_enabled == True
   run_once: true
   delegate_to: "{{ master_node }}"
   when: 'action_type == "install"'
@@ -38,7 +38,7 @@
     - openstack-neutron-openvswitch.noarch
     - python2-networking-hyperv
 
-- name: config /etc/neutron/neutron.conf for controller
+- name: config /etc/neutron/neutron.conf for neutron_vhostname
   ini_file:
     path: /etc/neutron/neutron.conf
     section: "{{ item.section }}"
@@ -46,7 +46,7 @@
     value: '{{ item.value }}'
   with_items:
     - { section: DEFAULT, option: debug, value: True }
-    - { section: DEFAULT, option: registry_host, value: "{{ controller_vhostname }}" }
+    - { section: DEFAULT, option: registry_host, value: "{{ neutron_vhostname }}" }
     - { section: DEFAULT, option: bind_host, value: "{{ cluster_ip }}" }
     - { section: DEFAULT, option: core_plugin, value: ml2 }
     - { section: DEFAULT, option: service_plugins, value: router }
@@ -61,7 +61,7 @@
     - { section: nova, option: username, value: nova }
     - { section: nova, option: password, value: "{{ openstack_nova_password }}" }
 
-- name: config /etc/neutron/plugins/ml2/ml2_conf.ini for controller
+- name: config /etc/neutron/plugins/ml2/ml2_conf.ini for neutron
   ini_file:
     path: /etc/neutron/plugins/ml2/ml2_conf.ini
     section: "{{ item.section }}"
@@ -79,7 +79,7 @@
     - { section: securitygroup, option: firewall_driver, value: neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver }
     - { section: ml2_type_flat, option: flat_networks, value: "{% if ext_card == '' or ext_card == None %}provider{% elif ext_card != '' and ext_card != None %}default,provider{% endif %}" }
 
-- name: config /etc/neutron/dhcp_agent.ini for controller
+- name: config /etc/neutron/dhcp_agent.ini for neutron
   ini_file:
     path: /etc/neutron/dhcp_agent.ini
     section: "{{ item.section }}"
@@ -94,18 +94,6 @@
 
 - include: neutron_ha_config.yml
   when: ha_enabled == True
-
-#- name: restart openvswitch service
-#  service: name={{ item }} state=restarted sleep=10 enabled=yes use=service
-#  with_items:
-#    - openvswitch
-#    - network
-#
-#- name: restart network
-#  shell: "systemctl stop openvswitch; systemctl start openvswicth; systemctl restart network"
-#
-#- name: wait until network service restarted
-#  wait_for_connection: delay=100 timeout=120
 
 - block:
 
@@ -138,7 +126,7 @@
       cloud: admin_cloud
       service: neutron
       endpoint_interface: "{{ item }}"
-      url: "http://{{ controller_vhostname }}:9696"
+      url: "http://{{ neutron_vhostname }}:9696"
       region: "{{ region_name }}"
       state: present
     with_items:
@@ -149,22 +137,29 @@
   - name: neutron-manage db sync
     register: result
     shell: "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head"
-    become: true
-    become_user: neutron
+    #become: true
+    #become_user: neutron
     until: result.rc == 0
     retries: 10
     delay: 10
 
   - include: neutron_pcs_restart.yml
-    when: ha_enabled == True
+    when: neutron_ha_enabled == True
 
   - include: neutron_service_restart.yml
-    when: ha_enabled == False
+    when: neutron_ha_enabled == False and ha_enabled == False
 
   run_once: true
-  delegate_to: "{{ master_node }}"
   when: 'action_type == "install"'
 
+- include: neutron_service_restart.yml
+  when: neutron_ha_enabled == False and ha_enabled == true
 
-
-
+- name: restart haproxy and httpd
+  shell: "pcs resource restart {{ item }}"
+  with_items:
+    - haproxy
+    - httpd-clone
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: ha_enabled == True

@@ -10,10 +10,10 @@
 - name: install docker-python
   shell: pip install --user /tmp/docker-python/*
 
-- name: install docker-ce via yum
+- name: install docker via yum
   yum: name={{ item }} state=latest
   with_items:
-    - docker-ce
+    - docker
 
 - name: enable and start docker-ce
   service: name=docker state=started enabled=yes

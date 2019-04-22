@@ -1,5 +1,13 @@
-server {{ ntp_server }} iburst
+{% for i in controllers %}
+server {{ i['cluster_ip'] }} iburst
+{% if i['sto_ip'] != None and i['sto_ip'] != "" %}
+server {{ i['sto_ip'] }} iburst
+{% endif %}
+{% endfor %}
 allow {{ cluster_net }}
+{% if sto_net != None and sto_net != "" %}
+allow {{ sto_net}}
+{% endif %}
 stratumweight 0
 driftfile /var/lib/chrony/drift
 rtcsync

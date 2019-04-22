@@ -35,6 +35,23 @@
     - neutron-metadata-agent.service
     - neutron-l3-agent.service
 
+- name: config /etc/nova/nova.conf for compute node
+  ini_file:
+    path: /etc/nova/nova.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: neutron, option: url, value: "http://{{ neutron_vhostname }}:9696" }
+    - { section: neutron, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: neutron, option: auth_type, value: password }
+    - { section: neutron, option: project_domain_name, value: default }
+    - { section: neutron, option: user_domain_name, value: default }
+    - { section: neutron, option: region_name, value: "{{ region_name }}" }
+    - { section: neutron, option: project_name, value: service }
+    - { section: neutron, option: username, value: neutron }
+    - { section: neutron, option: password, value: "{{ openstack_neutron_password }}" }
+
 - name: restart services
   service: name={{ item }} state=started enabled=yes
   with_items:

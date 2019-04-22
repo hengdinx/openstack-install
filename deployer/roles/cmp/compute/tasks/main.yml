@@ -1,8 +1,11 @@
 ---
 # tasks file for cmp
 
-- name: install mp-utils
-  yum: name=mp-utils state=latest
+- name: install e3c-mp-utils
+  yum: name={{ item }} state=latest
+  with_items:
+    - sysstat
+    - e3c-mp-utils
 
 - name: create dirs
   file: path={{ item }} state=directory owner=apache group=apache

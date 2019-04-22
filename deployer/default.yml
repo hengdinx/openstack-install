@@ -1,7 +1,8 @@
 ##############
 controller_vhostname_short:     "controllervhostname"
 controller_vhostname:           "{{ controller_vhostname_short }}.{{ domain }}"
-deploy_hostname:                "deployer"
+neutron_vhostname:              "{{ neutron_vhostname_short }}.{{ domain }}"
+deploy_hostname:                "deploy-master"
 
 controller_hostname_list:       "{{ controllers|selectattr('mg_ip')|map(attribute='hostname')|list }}"
 controller_hostname_list_str:   "{% for i in  controller_hostname_list %}{{ i }}.{{domain}}{% if not loop.last %},{% endif %}{% endfor %}"
@@ -15,7 +16,7 @@ compute_mg_ip_list:             "{{ computes|selectattr('hostname')|map(attribut
 openstack_rabbitmq_password:    '{{ default_password }}'
 
 mysql_cluster_name:             'mysql_cluster'
-wsrep_sst_username:             'mycluster'
+wsrep_sst_username:             'mysql-cluster'
 wsrep_sst_password:             '111111'
 mysql_root_password:            '{{ default_password }}'
 hacluster_pass:                 'hacluster'
@@ -26,13 +27,17 @@ nova_password:                  "nova"
 os_token:                       '055136e0cdd58f6bdd37' #generate automatically
 mysql_keystone_password:        '{{ default_password }}'
 
-openstack_admin_password:            '11111111'
-openstack_nova_password:             '{{ default_password }}'
-openstack_glance_password:           '{{ default_password }}'
-openstack_cinder_password:           '{{ default_password }}'
-openstack_neutron_password:          '{{ default_password }}'
-openstack_placement_password:        '{{ default_password }}'
-openstack_apiadmin_password:         '{{ default_password }}'
+mysql_mistral_user:             'mistral'
+mysql_mistral_password:         '{{ default_password }}'
+
+openstack_admin_password:       '11111111'
+openstack_nova_password:        '{{ default_password }}'
+openstack_glance_password:      '{{ default_password }}'
+openstack_cinder_password:      '{{ default_password }}'
+openstack_neutron_password:     '{{ default_password }}'
+openstack_placement_password:   '{{ default_password }}'
+openstack_apiadmin_password:    '{{ default_password }}'
+openstack_mistral_password:    '{{ default_password }}'
 
 metadata_proxy_shared_secret:   '{{ default_password }}'
 region_name:                    'RegionOne'
@@ -49,4 +54,6 @@ mysql_lbs_password:             '{{ default_password }}'
 ceph_user:                      "ceph"
 cephfile_path:                  "/tmp/ceph"
 
-version:                        "V4.2.0-RC11/20181121"
+version:                        "V4.2.5/20190404"
+
+#test:                           '{{ ["controller1"] | intersect(my_role) }}'

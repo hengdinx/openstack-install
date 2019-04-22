@@ -38,7 +38,7 @@
     command: "{{ item }}"
     register: result
     with_items:
-      - "cinder type-create ceph"
+      #- "cinder type-create ceph"
       - "cinder type-key ceph set volume_backend_name=ceph"
     until: result.rc == 1 or result.rc == 0
     retries: 5

@@ -1,0 +1,5 @@
+---
+# tasks file for version
+
+- name: update version info
+  template: src=productinfo.j2 dest=/opt/zero/.productinfo

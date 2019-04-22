@@ -4,7 +4,7 @@ import sys
 
 os.sys.path.append(os.path.dirname(__file__))
 
-from operator import operator
+from e3c_operator import e3c_operator
 
 APP_PATH = os.path.dirname(__file__)
 
@@ -16,7 +16,7 @@ def main():
     p_name = 'operator'
     pid_fn = APP_PATH+'/operator.pid'
     log_fn = APP_PATH+'/operator.log'
-    err_fn = APP_PATH+'/operator.err.log'
+    err_fn = APP_PATH+'/operator.log'
     cD = operator(p_name, pid_fn, stdout=log_fn, stderr=err_fn, verbose=1)
 
     if sys.argv[1] == 'start':

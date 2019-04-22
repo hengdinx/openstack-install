@@ -1,0 +1,30 @@
+
+Listen {{ cluster_ip }}:8100
+
+#WSGIPythonPath /opt/zero/
+<VirtualHost {{ cluster_ip }}:8100>
+
+WSGIDaemonProcess e3c-mp processes=4 threads=50
+WSGIProcessGroup e3c-mp
+
+WSGIScriptAlias / /opt/zero/cmp/wsgi.py
+<Directory /opt/zero/cmp/>
+  Options All
+  AllowOverride All
+Require all granted
+</Directory>
+
+
+Alias /static/ /opt/zero/static/
+
+<Directory /opt/zero/static/>
+  Options All
+  AllowOverride All
+  Require all granted
+</Directory>
+
+SSLEngine on
+SSLCertificateFile    /etc/pki/tls/certs/server.crt
+SSLCertificateKeyFile /etc/pki/tls/private/server.key
+
+</VirtualHost>

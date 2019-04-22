@@ -1,0 +1,118 @@
+---
+# tasks file for mistral
+
+- name: install needed rpms for mistral with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - python2-mistralclient
+    - openstack-mistral-all
+    - openstack-mistral-api
+    - openstack-mistral-common
+    - openstack-mistral-engine
+    - openstack-mistral-executor
+    - puppet-mistral
+    - python-openstack-mistral
+
+- name: config /etc/mistral/mistral.conf
+  ini_file:
+    path: /etc/mistral/mistral.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+    mode: 0666
+  with_items:
+    - { section: DEFAULT, option: transport_url, value: "rabbit://{% for i in controllers %}openstack:{{ openstack_rabbitmq_password }}@{{ i['hostname'] }}{% if not loop.last %},{% endif %}{% endfor %}" }
+    - { section: DEFAULT, option: rpc_backend, value: rabbit }
+    - { section: api, option: host, value: "{{ cluster_ip }}" }
+    - { section: keystone_authtoken, option: auth_uri, value: "http://{{ controller_vhostname }}:5000/v3" }
+    - { section: keystone_authtoken, option: identity_uri, value: "http://{{ controller_vhostname }}:35357" }
+    - { section: keystone_authtoken, option: admin_user, value: "admin" }
+    - { section: keystone_authtoken, option: admin_password, value: "{{ openstack_admin_password }}" }
+    - { section: keystone_authtoken, option: admin_tenant_name, value: "admin" }
+    - { section: keystone_authtoken, option: auth_version, value: "v3" }
+    - { section: database, option: connection, value: "mysql+pymysql://root:{{ mysql_root_password }}@{{ controller_vhostname }}/mistral" }
+
+- include: mistral_ha_config.yml
+  when: ha_enabled == True
+
+- block:
+  - name: cleanup mistral database
+    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=mistral state=absent
+
+  - name: create database for mistral
+    mysql_db: name={{ item }} login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+    with_items:
+      - mistral
+
+  - name: delete mistral db user
+    mysql_user: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=mistral state=absent
+
+  - name: create mistral user
+    mysql_user:
+      login_host: "{{ vip }}"
+      login_password: "{{ mysql_root_password }}"
+      login_user: root
+      name: "{{ mysql_mistral_user }}"
+      host: "{{ item }}"
+      priv: "mistral.*:ALL,GRANT"
+      password: "{{ mysql_mistral_password }}"
+    with_items:
+      - "%"
+      - 127.0.0.1
+      - ::1
+      - "localhost"
+
+  - name: grant roles for mistral users
+    os_user_role:
+      cloud: admin_cloud
+      user: "{{ item.user }}"
+      role: admin
+      project: "{{ item.project }}"
+    with_items:
+      - { user: mistral, project: service }
+
+  - name: create mistral serivce
+    os_keystone_service:
+      cloud: admin_cloud
+      name: "{{ item.name }}"
+      state: present
+      service_type: "{{ item.type }}"
+      description: "{{ item.description }}"
+    with_items:
+      - { name: mistral, type: 'workflowv2', description: 'mistral Project'}
+
+  - name: Create endpoint for mistral
+    os_keystone_endpoint:
+      cloud: admin_cloud
+      service: "{{ item.service }}"
+      endpoint_interface: "{{ item.interface }}"
+      url: "{{ item.url }}"
+      region: "{{ region_name }}"
+      state: present
+    with_items:
+      - { service: mistral, interface: public, url: "http://{{ controller_vhostname }}:8989/v2" }
+      - { service: mistral, interface: internal, url: "http://{{ controller_vhostname }}:8989/v2" }
+      - { service: mistral, interface: admin, url: "http://{{ controller_vhostname }}:8989/v2" }
+
+  - name: mistral database upgrade head
+    shell: "/usr/bin/mistral-db-manage --config-file /etc/mistral/mistral.conf upgrade head"
+  
+  - name: mistral database populate
+    shell: "/usr/bin/mistral-db-manage --config-file /etc/mistral/mistral.conf populate"
+
+  - include: mistral_pcs_config.yml
+    when: ha_enabled == True
+
+  - include: mistral_service_restart.yml
+    when: ha_enabled == False
+
+  - name: copy vm_start.yaml to /tmp
+    copy: src=vm_start.yaml dest=/tmp/vm_start.yaml
+
+  - name: import work flow
+    shell: "source /root/keystonerc_admin; mistral workflow-create --os-tenant-name admin --public /tmp/vm_start.yaml"
+
+  run_once: true
+  delegate_to: "{{ master_node }}"
+  when: 'action_type == "install"'
+

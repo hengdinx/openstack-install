@@ -12,6 +12,9 @@
   - name: restart httpd service
     service: name=httpd state=restarted enabled=yes
     when: ha_enabled == False
+
+  - include: cmp_ha_config.yml
+    when: ha_enabled
   run_once: true
   delegate_to: "{{ master_node }}"
   when: 'action_type == "install"'
@@ -22,3 +25,18 @@
 - include: tserver_service_restart.yml
   when: hostname in groups.controller and ha_enabled == False
 
+- name: copy /opt/e3c-install/oem_resource.tar.gz to remote /tmp
+  copy: src=/opt/e3c-install/oem_resource.tar.gz dest=/tmp/oem_resource.tar.gz
+  register: change_icon
+  ignore_errors: true
+
+- include: change_icon.yml
+  when: change_icon.failed == false or 'Could not find or access' not in change_icon.msg
+
+- name: check if /tmp/download_files.tar.gz exists
+  shell: 'ls /tmp/download_files.tar.gz'
+  register: change_download_files
+  failed_when:  change_download_files.rc != 2 and change_download_files.rc != 0
+
+- include: change_download_files.yml
+  when: change_download_files.rc == 0

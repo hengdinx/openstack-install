@@ -1,14 +1,5 @@
 ---
 
-- name: cleanup nova
-  yum: name={{ item }} state=absent
-  with_items:
-    - openstack-nova-compute
-    - qemu-img-ev
-    - qemu-kvm-common-ev
-    - qemu-kvm-ev
-    - spice-server
-
 - name: install nova with yum
   yum: name={{ item }} state=latest
   with_items:
@@ -22,6 +13,7 @@
     - qemu-kvm-ev
     - spice-server
     - libvirt
+    - libvirt-python
     - libvirt-bash-completion
     - libvirt-client
     - libvirt-daemon
@@ -45,6 +37,9 @@
     - libvirt-daemon-driver-storage-scsi
     - libvirt-daemon-kvm
     - libvirt-libs
+    - librbd1
+    - libvirt-python
+    - python-rbd
 
 - name: enable login for nova user and set password
   user: name=nova password={{ nova_password |password_hash('sha512') }} generate_ssh_key=yes home=/home/nova shell=/bin/bash

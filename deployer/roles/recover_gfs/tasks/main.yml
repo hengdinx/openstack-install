@@ -2,7 +2,11 @@
 # gluster config
 
 - name: umount /mnt/gfs
-  mount: path=/mnt/gfs state=absent
+  mount: path={{ item }} state=absent
+  with_items:
+    - /mnt/gfs
+    - /var/lib/zero/OTC
+    - /var/lib/zero/ISO
 
 - name: stop glusterd service
   service: name=glusterd state=restarted enabled=yes
@@ -32,6 +36,16 @@
   retries: 5
   delay: 10
 
+- name: sleep 10s for glusterd service write /var/lib/glusterd/glusterd.info
+  shell: sleep 10
+
+- name: copy configure file for gfs
+  copy: src={{ item.src }}  dest={{ item.dest }} group=root owner=root mode=755
+  with_items:
+    - { src: e3c-gfsmount, dest: /usr/bin/e3c-gfsmount }
+    - { src: e3c-gfsmount.service, dest: /usr/lib/systemd/system/e3c-gfsmount.service }
+    - { src: del_brick.py, dest: /tmp/ }
+
 - name: modify /var/lib/glusterd/glusterd.info
   ini_file:
     path: /var/lib/glusterd/glusterd.info
@@ -39,13 +53,6 @@
     section: null
     no_extra_spaces: yes
     value: "{{ gfs_uuid.stdout }}"
-
-- name: copy configure file for gfs
-  copy: src={{ item.src }}  dest={{ item.dest }} group=root owner=root mode=755
-  with_items:
-    - { src: gfsmount, dest: /usr/bin/gfsmount }
-    - { src: gfsmount.service, dest: /usr/lib/systemd/system/gfsmount.service }
-    - { src: del_brick.py, dest: /tmp/ }
 
 - name: start necessary services
   service: name=glusterd state=restarted enabled=yes
@@ -58,6 +65,7 @@
 
 - name: remove brick
   shell: "/tmp/del_brick.py {{ hostname }}"
+#  gluster_volume: state=absent name=e3cgfs replicas=2 bricks=/mnt/gfs cluster={{ hostname }} force=yes
 
 - name: remove /mnt/gfs
   file: path=/mnt/gfs state=absent owner=apache group=apache
@@ -66,14 +74,37 @@
   file: path=/mnt/gfs state=directory owner=apache group=apache
 
 - name: add brick
-  gluster_volume: state=present name=mygfs replicas=3 bricks=/mnt/gfs cluster={{ hostname }} force=yes
+  gluster_volume: state=present name=e3cgfs replicas=3 bricks=/mnt/gfs cluster={{ hostname }} force=yes
 
-- name: sleep 20s to wait for sync
-  shell: sleep 20
+- name: sleep 10s to wait for sync
+  shell: sleep 10
 
-- name: restart gfsmount.service
+- name: make tmp dir for replace
+  file: path=/mnt/tmp state=directory
+
+- name: replace-brick to /mnt/tmp
+  shell: 'gluster volume replace-brick e3cgfs {{ hostname }}:/mnt/gfs {{ hostname }}:/mnt/tmp commit force'
+  register: replace_result
+  until: replace_result.rc == 0
+  retries: 10
+  delay: 10
+
+- name: sleep 10s to wait for sync
+  shell: sleep 10
+
+- name: replace-brick to /mnt/gfs
+  shell: 'gluster volume replace-brick e3cgfs {{ hostname }}:/mnt/tmp {{ hostname }}:/mnt/gfs commit force'
+  register: replace_result
+  until: replace_result.rc == 0
+  retries: 10
+  delay: 10
+
+- name: sleep 10s to wait for sync
+  shell: sleep 10
+
+- name: restart e3c-gfsmount.service
   systemd:
-    name: gfsmount
+    name: e3c-gfsmount
     daemon_reload: yes
     state: started
     enabled: yes

@@ -16,6 +16,7 @@
     - mysql
     - MySQL-python
     - mariadb-config
+    - mariadb-server-galera
 
 - name: clean up database and config files
   file: path={{ item }} state=absent
@@ -28,37 +29,37 @@
 - name: install MariaDB with yum
   yum: name={{ item }} state=latest
   with_items:
-    - MariaDB-client
-    - MariaDB-Galera-server
-    - galera
+    - mariadb-server-galera
     - MySQL-python
 
 - name: render wsrep.cnf
   template: src=wsrep.cnf.j2 dest=/etc/my.cnf
 
+- name: add openfile limit in service config
+  ini_file: 
+    path: /usr/lib/systemd/system/mariadb.service
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: '{{ item.value }}'
+  with_items:
+    - { section: Service, option: LimitNOFILE, value: 50000 }
+
+- name: reload daemon to ensure config take effect
+  systemd:
+    daemon_reload: yes
+
 - block:
-  - name: bootstrap mysql cluster on first node
-    command: service mysql start --wsrep-new-cluster
-    run_once: true
-    delegate_to: "{{ master_node }}"
-  
-  - name: stop mysql service on other nodes
-    service: name=mysql state=stopped
-    when: hostname != master_node
-  
-  - name: start mysql with service command
-    command: service mysql start
-    when: hostname != master_node
+  - include: "bootstrap.yml"
   
   - include: security.yml
     when: hostname == master_node
   when: 'action_type == "install"'
 
 - block:
-  - name: stop mysql service on other nodes
-    service: name=mysql state=stopped
+  - name: stop mysql service new node
+    service: name=mariadb state=stopped
 
   - name: start mysql with service command
-    command: service mysql start
+    command: service mariadb start
   when: 'action_type == "recover_controller"'
 

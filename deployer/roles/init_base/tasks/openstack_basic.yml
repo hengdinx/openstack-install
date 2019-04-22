@@ -1,26 +1,5 @@
 ---
 
-- name: remove pyOpenSSL
-  yum: name=pyOpenSSL state=absent
-
-- name: install needed software
-  yum:
-    name: "{{ item }}"
-    state: latest
-  with_items:
-    - openstack-utils
-    - openstack-selinux
-    - python-openstackclient
-    - iftop
-    - iperf
-    - pyOpenSSL
-
-- name: disable selinux
-  selinux: state=disabled
-
-- name: copy qemu-acl rule file
-  copy: src=50-qemu-acl.rules dest=/etc/polkit-1/rules.d/
-
 - name: install openvswitch
   yum: name=openvswitch state=latest
   when: '"neutron" in my_role or "compute" in my_role'

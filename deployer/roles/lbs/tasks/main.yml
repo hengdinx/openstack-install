@@ -36,7 +36,7 @@
     value: '{{ item.value }}'
     mode: 0755
   with_items:
-    - { section: lbs, option: db_ip, value: "{{ vip }}" }
+    - { section: lbs, option: db_ip, value: "{{ controller_vhostname }}" }
     - { section: lbs, option: db_user, value: "{{ mysql_lbs_user }}" }
     - { section: lbs, option: db_passwd, value: "{{ mysql_lbs_password }}" }
   register: result_ini
@@ -45,42 +45,11 @@
   delay: 5
 
 - block:
-  - name: cleanup lbs db
-    mysql_db:
-      login_host: "{{ vip }}"
-      login_user: root
-      login_password: "{{ mysql_root_password }}"
-      name: lbs
-      state: absent
-  
-  - name: delete lbs mysql user
-    mysql_user:
-      login_user: root
-      login_password: "{{ mysql_root_password }}"
-      login_host: "{{ vip }}"
-      name: lbs
-      state: absent
-  
-  - name: copy lb.sql to remote
-    copy: src=lb.sql dest=/tmp/
-  
   - name: import lb.sql
-    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=lbs state=import target=/tmp/lb.sql
+    mysql_db: login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} name=lbs state=import target=/opt/lbs.sql
 
-  - name: create lbs user
-    mysql_user:
-      login_password: "{{ mysql_root_password }}"
-      login_user: root
-      login_host: "{{ vip }}"
-      name: "{{ mysql_lbs_user }}"
-      host: "{{ item }}"
-      priv: "lbs.*:ALL,GRANT"
-      password: "{{ mysql_lbs_password }}"
-    with_items:
-      - "%"
-      - 127.0.0.1
-      - ::1
-      - "localhost"
+  - name: remove lb.sql
+    file: path=/opt/lbs.sql state=absent 
   
   - include: lbs_pcs_restart.yml
     when: ha_enabled == True

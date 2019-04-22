@@ -29,8 +29,9 @@
     - memcached
     - keystone
     - nova/controller
+    - openstack_network
     - glance
-    - neutron/controller
+    - mistral
     - cinder
     - consul
     - zabbix/controller
@@ -40,6 +41,18 @@
     - vpn
     - ceph/controller
     - version
+  vars_files:
+    - default.yml
+    - keys.yml
+
+- hosts: new_node_neutron
+  gather_facts: False
+  roles:
+    - system_controller
+    - neutron/controller
+    - zabbix/compute
+    - docker
+    - vpn
   vars_files:
     - default.yml
     - keys.yml

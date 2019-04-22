@@ -1,0 +1,37 @@
+---
+
+- name: modify /etc/haproxy/haproxy.cfg
+  blockinfile:
+    path: /etc/haproxy/haproxy.cfg
+    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR CMP"
+    block: |
+      listen dashboard_cluster
+          bind {{ controller_vhostname }}:8100 ssl crt /etc/ssl/certs/e3cloud.pem
+          balance  source
+          mode    http
+          option http-server-close
+          option forwardfor
+          stick-table type ip size 200k expire 30m
+          stick on src
+          reqadd X-Forwarded-Proto:\ https
+          capture request header Host len 255
+          capture request header User-Agent len 255
+          capture request header Referer len 255
+          capture request header Cookie len 255
+          timeout http-request 50s
+          timeout http-keep-alive 55s
+          timeout client 3h
+          timeout server 3h
+      {% for i in controllers %}
+          server {{ i['hostname'] }} {{ i['hostname'] }}:8100 ssl cookie web1 weight 10 check inter 2000 rise 2 fall 5
+      {% endfor %}
+
+- name: restart haproxy resource
+  shell: pcs resource restart haproxy
+
+- name: wait until haproxy started
+  shell: 'pcs status|grep -A 1 haproxy'
+  register: result
+  retries: 5
+  delay: 10
+  until: '"Started" in result.stdout'

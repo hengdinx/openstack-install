@@ -1,0 +1,42 @@
+---
+version: "2.0"
+
+vm_start_workflow:
+  type: direct
+
+  input:
+    - hypervisor_ids
+
+  tasks:
+
+    get_active_nodes:
+      with-items: hypervisor_id in <% $.hypervisor_ids %>
+      action: nova.hypervisors_get hypervisor=<% $.hypervisor_id %>
+      publish:
+        node_list: <% task().result.where($.status = 'enabled' and $.state = 'up').id %>
+      on-success:
+        - get_reboot_nodes
+
+    get_reboot_nodes:
+      with-items: node in <% $.node_list %>
+      action: nova.hypervisors_uptime hypervisor=<% $.node %>
+      publish:
+        reboot_nodes: <% task().result.where(regex("up [1-9] min").search($.uptime)!=null).hypervisor_hostname %>
+      on-success:
+        - find_shutoff_instance
+
+    find_shutoff_instance:
+      with-items: rebootnode in <% $.reboot_nodes %>
+      action: nova.servers_list
+      input:
+        search_opts:
+          status: 'SHUTOFF'
+          OS-EXT-SRV-ATTR:host: $.rebootnode
+      publish:
+        shutoffinst: <% task().result.id.flatten() %>
+      on-success:
+        - do_reboot
+
+    do_reboot:
+      with-items: inst in <% $.shutoffinst %>
+      action: nova.servers_start server=<% $.inst %>

@@ -28,27 +28,6 @@ defaults
     timeout  server 1m
     timeout  check 10s
 
-listen dashboard_cluster
-    bind {{ controller_vhostname }}:8100 ssl crt /etc/ssl/certs/my.pem
-    balance  source
-    mode    http
-    option http-server-close
-    option forwardfor
-    stick-table type ip size 200k expire 30m
-    stick on src
-    reqadd X-Forwarded-Proto:\ https
-    capture request header Host len 255
-    capture request header User-Agent len 255
-    capture request header Referer len 255
-    capture request header Cookie len 255
-    timeout http-request 50s
-    timeout http-keep-alive 55s
-    timeout client 3h
-    timeout server 3h
-{% for i in controllers %}
-    server {{ i['hostname'] }} {{ i['hostname'] }}:8100 ssl cookie web1 weight 10 check inter 2000 rise 2 fall 5
-{% endfor %}
-
 listen admin_stats
         stats   enable
         bind    {{ vip }}:9000

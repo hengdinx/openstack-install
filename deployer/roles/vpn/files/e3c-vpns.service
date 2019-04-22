@@ -1,0 +1,13 @@
+[Unit]
+Description=e3c-vpns service
+Requires=network-online.target
+After=network-online.target
+
+[Service]
+Restart=on-failure
+ExecStart=/usr/bin/python2 /opt/e3c-vpns/Service.py
+ExecReload=/bin/kill -HUP
+
+[Install]
+WantedBy=multi-user.target
+

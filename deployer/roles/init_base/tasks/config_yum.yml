@@ -1,5 +1,13 @@
 ---
 
+- name: stop packagekit service
+  service: name=packagekit state=stopped enabled=no
+  register: stop_service
+  failed_when: 'stop_service.failed == True and "Could not find the requested service" not in stop_service.msg'
+
+- name: remove packagekit package
+  yum: name=PackageKit state=absent
+
 - name: del old repos
   file: path=/etc/yum.repos.d state=absent
 
@@ -7,7 +15,7 @@
   file: path=/etc/yum.repos.d/ state=directory
 
 - name: copy repo to remote
-  copy: src=my.repo dest=/etc/yum.repos.d/my.repo
+  copy: src=e3c.repo dest=/etc/yum.repos.d/e3c.repo
 
 - name: clean yum cache
   command: "yum clean all"

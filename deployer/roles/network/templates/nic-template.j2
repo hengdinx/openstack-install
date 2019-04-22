@@ -1,4 +1,4 @@
-{% if item.port == ext_card or item.port == mg_card %}
+{% if item.port == ext_card or item.port == mg_card and (["neutron", "compute"]|intersect(my_role) != []) %}
 TYPE=OVSPort
 {% else %}
 TYPE=Ethernet
@@ -7,7 +7,7 @@ BOOTPROTO=static
 IPV6INIT=no
 DEVICE={{ item.port }}
 ONBOOT=yes
-{% if item.br_name is defined %}
+{% if item.br_name is defined and (["neutron", "compute"]|intersect(my_role) != []) %}
 OVS_BRIDGE={{ item.br_name }}
 {% else %}
 IPADDR={{ item.ip }}

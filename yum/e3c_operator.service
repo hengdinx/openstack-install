@@ -1,0 +1,13 @@
+[Unit]
+Description=e3c install backend  Service
+After=multi-user.target
+
+[Service]
+Type=forking
+RemainAfterExit=yes
+ExecStart=/usr/bin/python /opt/e3c-install/e3c-operator/main.pyc start
+ExecStop=/usr/bin/python /opt/e3c-install/e3c-operator/main.pyc stop
+
+[Install]
+WantedBy=multi-user.target
+

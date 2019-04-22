@@ -20,9 +20,6 @@
       - { name: html5mmr_ws_server, service: html5mmr-ws-server }
       - { name: zero_evacuate, service: zero_evacuate }
 
-  - name: create vdibroker resource
-    shell: 'pcs resource create vdibroker systemd:vdibroker --clone interleave=true'
-
   - name: set order for tserver resources
     shell: 'pcs constraint order start vip then {{ item }} kind=Optional'
     with_items:
@@ -50,13 +47,6 @@
       - otc-ip
       - html5mmr_ws_server
       - zero_evacuate
-
-  - name: wait until vdibroker start
-    shell: 'pcs status |grep -A 1 vdibroker'
-    register: result
-    retries: 10
-    delay: 10
-    until: '"Started" in result.stdout'
 
   - name: disable zero_evacuate resource
     shell: pcs resource disable zero_evacuate

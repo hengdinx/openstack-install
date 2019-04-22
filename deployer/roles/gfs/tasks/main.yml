@@ -1,6 +1,13 @@
 ---
 # gluster config
 
+- name: install glusterfs with yum
+  yum: name={{ item }} state=latest
+  with_items:
+    - glusterfs
+    - glusterfs-server
+    - glusterfs-coreutils
+
 - name: start necessary services
   service: name={{ item }} state=started enabled=yes
   with_items:
@@ -19,6 +26,41 @@
 
 - block:
 
+  #- name: probe first node to the pool
+  #  shell: "gluster peer probe {{ item }}"
+  #  with_items:
+  #    - "{{ controller_hostname_list }}"
+
+  #- name: sleep 10s for probe
+  #  shell: sleep 10
+
+  #- name: create glusterFS volumes for HA install
+  #  shell: "gluster volume create e3cgfs replica 3 {% for i in controller_hostname_list %}{{ i }}:/mnt/gfs {% endfor %} force"
+  #  register: result
+  #  failed_when: 'result.rc != 0 and "already exists" not in result.stderr'
+  #  when: ha_enabled
+
+  #- name: create glusterFS volumes for ALLINONE install
+  #  shell: "gluster volume create e3cgfs           {% for i in controller_hostname_list %}{{ i }}:/var/lib/zero/ISO {% endfor %} force"
+  #  register: result
+  #  failed_when: 'result.rc != 0 and "already exists" not in result.stderr'
+  #  when: ha_enabled == False
+
+  #- name: sleep 10s for volume create
+  #  shell: sleep 10
+
+  #- name: start gluster volume
+  #  shell: gluster volume start e3cgfs
+  #  register: result
+  #  failed_when: 'result.rc != 0 and "already started" not in result.stderr'
+
+  #- name: wait until volume available
+  #  shell: gluster volume status
+  #  register: result
+  #  until: '"e3cgfs" in result.stdout'
+  #  retries: 10
+  #  delay: 10
+
   - name: probe peer
     gluster_peer: state=present nodes={{ controller_hostname_list }}
 
@@ -27,7 +69,7 @@
 
   - name: create glusterFS volumes
     gluster_volume:
-      name: mygfs
+      name: e3cgfs
       replicas: 3
       state: present
       bricks: /mnt/gfs
@@ -37,7 +79,7 @@
 
   - name: create glusterFS volumes
     gluster_volume:
-      name: mygfs
+      name: e3cgfs
       state: present
       bricks: /var/lib/zero/ISO
       cluster: "{{ controller_hostname_list }}"
@@ -50,7 +92,7 @@
   - name: start gluster volume
     gluster_volume:
       state: started
-      name: mygfs
+      name: e3cgfs
 
   - name: sleep 5s for volume start
     shell: sleep 5
@@ -60,16 +102,16 @@
   when: 'action_type == "install"'
 
 - name: copy configure file for gfs
-  copy: src=gfsmount dest=/usr/bin/gfsmount group=root owner=root mode=755
+  copy: src=e3c-gfsmount dest=/usr/bin/e3c-gfsmount group=root owner=root mode=755
 
 - name: copy gfsmount service file
   copy:
-    src: gfsmount.service
-    dest: /usr/lib/systemd/system/gfsmount.service
+    src: e3c-gfsmount.service
+    dest: /usr/lib/systemd/system/e3c-gfsmount.service
 
-- name: restart gfsmount.service
+- name: restart e3c-gfsmount.service
   systemd:
-    name: gfsmount
+    name: e3c-gfsmount
     daemon_reload: yes
     state: started
     enabled: yes

@@ -14,7 +14,7 @@
   - name: wait until consul-sto start
     shell: 'pcs status|grep -A 1 {{ item }}'
     register: result
-    retries: 5
+    retries: 10
     delay: 10
     until: '"Started" in result.stdout'
     with_items:

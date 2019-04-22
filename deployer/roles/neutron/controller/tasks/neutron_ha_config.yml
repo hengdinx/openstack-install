@@ -1,21 +1,6 @@
 ---
 
-- name: modify /etc/haproxy/haproxy.cfg
-  blockinfile:
-    path: /etc/haproxy/haproxy.cfg
-    marker: "#{mark} ANSIBLE MANAGED BLOCK FOR NEUTRON"
-    block: |
-      listen neutron_api_cluster
-          bind {{ controller_vhostname }}:9696
-          balance  source
-          option  tcpka
-          option  httpchk
-          option  tcplog
-          {% for i in controllers %}
-          server {{ i['hostname'] }} {{ i['cluster_ip'] }}:9696 check inter 2000 rise 2 fall 5
-          {% endfor %}
-
-- name: config /etc/neutron/neutron.conf for controller HA
+- name: config /etc/neutron/neutron.conf for neutron HA
   ini_file:
     path: /etc/neutron/neutron.conf
     section: "{{ item.section }}"

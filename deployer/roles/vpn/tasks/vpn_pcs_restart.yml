@@ -1,32 +1,32 @@
 ---
 
-- name: cleanup vpn resource
+- name: cleanup e3c-vpn resource
   shell: 'pcs resource delete {{ item }}'
   with_items:
-    - vpns
+    - e3c-vpns
   register: result
   failed_when: result.rc != 0 and "does not exist" not in result.stderr
 
-- name: create vpn resource
-  shell: 'pcs resource create vpns systemd:vpns op start interval="0" timeout="300s" op stop interval="0" timeout="300s"'
+- name: create e3c-vpn resource
+  shell: 'pcs resource create e3c-vpns systemd:e3c-vpns op start interval="0" timeout="300s" op stop interval="0" timeout="300s"'
 
 - name: set order for vpn resource
-  shell: "pcs constraint order start vip then vpns kind=Optional"
+  shell: "pcs constraint order start vip then e3c-vpns kind=Optional"
 
 - name: set constraint for vpn resource
-  shell: "pcs constraint colocation add vpns with vip"
+  shell: "pcs constraint colocation add e3c-vpns with vip"
 
-- name: wait until vpns resource create start
+- name: wait until e3c-vpns resource create start
   shell: 'pcs status|grep {{ item }}'
   register: result
   retries: 5
   delay: 10
   until: '"Started" in result.stdout'
   with_items:
-    - vpns
+    - e3c-vpns
 
 - name: restart vpn resource
-  shell: "pcs resource restart vpns"
+  shell: "pcs resource restart e3c-vpns"
 
 - name: wait until openstack start
   shell: 'pcs status|grep {{ item }}'
@@ -35,5 +35,5 @@
   delay: 10
   until: '"Started" in result.stdout'
   with_items:
-    - vpns
+    - e3c-vpns
 

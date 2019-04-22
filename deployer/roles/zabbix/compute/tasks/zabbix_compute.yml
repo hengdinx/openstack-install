@@ -4,7 +4,7 @@
   yum: name={{ item }} state=latest
   with_items:
     - zabbix22-agent
-    - mp-utils
+    - e3c-mp-utils
 
 - name: create /var/lib/zabbix
   file: path=/var/lib/zabbix state=directory
@@ -62,9 +62,10 @@
     - "zabbix ALL=NOPASSWD:/usr/bin/touch,/sbin/shutdown,/usr/bin/ipmitool,/usr/sbin/vgs,/usr/bin/systemctl,/usr/bin/qemu-img,/usr/bin/xargs,/usr/bin/awk,/usr/bin/virsh,/usr/bin/rm"
     - "apache ALL=NOPASSWD:ALL"
 
-- name: render /var/lib/zabbix/interface_name
+- name: render /var/lib/zabbix/host_delete.py 
   template: src={{ item.src }} dest={{ item.dest }} mode=0755
   with_items:
+    - { src: host_delete.py.j2, dest: /var/lib/zabbix/host_delete.py }
     - { src: interface_name.j2, dest: /var/lib/zabbix/interface_name }
 
 - name: modify owner and group for /var/lib/zabbix

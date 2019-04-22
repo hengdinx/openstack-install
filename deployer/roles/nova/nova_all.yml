@@ -15,7 +15,7 @@
     - { section: DEFAULT, option: use_neutron, value: True }
     - { section: DEFAULT, option: firewall_driver, value: nova.virt.firewall.NoopFirewallDriver }
     - { section: DEFAULT, option: reclaim_instance_interval, value: 31536000 }
-    - { section: DEFAULT, option: allow_resize_to_same_host, value: false }
+    - { section: DEFAULT, option: allow_resize_to_same_host, value: true }
     - { section: DEFAULT, option: vif_plugging_is_fatal, value: true }
     - { section: DEFAULT, option: resize_confirm_window, value: 1 }
     - { section: DEFAULT, option: vif_plugging_timeout, value: 300 }
@@ -64,13 +64,3 @@
     - { section: spice, option: html5proxy_base_url, value: "http://{{ cluster_ip }}:6082/spice_auto.html" }
     - { section: spice, option: server_listen, value: 0.0.0.0 }
     - { section: spice, option: html5proxy_host, value: "{{ cluster_ip }}" }
-    - { section: neutron, option: url, value: "http://{{ controller_vhostname }}:9696" }
-    - { section: neutron, option: auth_url, value: "http://{{ controller_vhostname }}:35357" }
-    - { section: neutron, option: auth_type, value: password }
-    - { section: neutron, option: project_domain_name, value: default }
-    - { section: neutron, option: user_domain_name, value: default }
-    - { section: neutron, option: region_name, value: "{{ region_name }}" }
-    - { section: neutron, option: project_name, value: service }
-    - { section: neutron, option: username, value: neutron }
-    - { section: neutron, option: password, value: "{{ openstack_neutron_password }}" }
-

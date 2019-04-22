@@ -1,0 +1,11 @@
+[Unit]
+Description=mount e3cgfs
+After=network.target glusterd.service glusterfsd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/e3c-gfsmount
+
+[Install]
+WantedBy=multi-user.target

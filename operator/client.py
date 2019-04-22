@@ -4,6 +4,16 @@ import socket
 import struct
 import time
 import json
+import argparse
+
+parser = argparse.ArgumentParser(description='client for operator service')
+parser.add_argument('-c','--config', help='config file name', required=True)
+args=parser.parse_args()
+
+def init_sock():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect(('127.0.0.1', 8111))
+    return s
 
 def send_file_all(file_name):
     s = init_sock()
@@ -40,7 +50,6 @@ def send_file_all(file_name):
                     break
                 body = dataBuffer[headerSize:headerSize+bodySize]
 
-                #dataHandle(headPack, body)
                 data = json.loads(body)
 
                 dataBuffer = dataBuffer[headerSize+bodySize:]
@@ -49,4 +58,4 @@ def send_file_all(file_name):
                     break
     s.close()
 
-send_file_all("interface.txt")
+send_file_all(args.config)

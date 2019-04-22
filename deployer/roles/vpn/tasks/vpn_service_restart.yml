@@ -1,4 +1,4 @@
 ---
 
 - name: restart vpn
-  service: name=vpns state=restarted enabled=yes
+  service: name=e3c-vpns state=restarted enabled=yes

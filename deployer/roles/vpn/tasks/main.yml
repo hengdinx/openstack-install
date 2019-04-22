@@ -33,16 +33,16 @@
   copy: src={{ item.src }} dest={{ item.dest }}
   with_items:
     - {src: openvpn-server2.4.6, dest: /tmp/ }
-    - {src: vpns-1.0.0.tar.gz, dest: /tmp/ }
-    - {src: vpns.service, dest: /usr/lib/systemd/system/ }
+    - {src: e3c-vpns-1.0.0.tar.gz, dest: /tmp/ }
+    - {src: e3c-vpns.service, dest: /usr/lib/systemd/system/ }
 
-- name: unzi vpns-1.0.0.tar.gz to /opt
-  shell: tar -zxf /tmp/vpns-1.0.0.tar.gz -C /opt/
+- name: unzip e3c-vpns-1.0.0.tar.gz to /opt
+  shell: tar -zxf /tmp/e3c-vpns-1.0.0.tar.gz -C /opt/
 
-- name: copy vpn.conf
+- name: copy e3c-vpn.conf
   template: src={{ item.src }} dest={{ item.dest }}
   with_items:
-    - {src: vpns.conf.j2, dest: /opt/vpns/conf/vpns.conf }
+    - {src: e3c-vpns.conf.j2, dest: /opt/e3c-vpns/conf/e3c-vpns.conf }
 
 - name: config sysctl.conf
   sysctl: name=net.ipv4.ip_forward value=1
@@ -55,13 +55,13 @@
 - name: cleanup old images
   docker_image:
     tls_hostname: controller1
-    name: myimage/openvpn-server2.4.6
+    name: e3cloud/openvpn-server2.4.6
     tag: 201807101649 
     state: absent
 
 - name: load docker image
   docker_image:
-    name: myimage/openvpn-server2.4.6
+    name: e3cloud/openvpn-server2.4.6
     tag: 201807101649 
     timeout: 600
     #push: yes
@@ -74,7 +74,7 @@
     interactive: yes
     tty: yes
     detach: yes
-    image: myimage/openvpn-server2.4.6:201807101649
+    image: e3cloud/openvpn-server2.4.6:201807101649
     command: "/usr/sbin/openvpn --cd /etc/openvpn/server --config server.conf"
     network_mode: host
     privileged : yes
@@ -85,18 +85,17 @@
 
 - block:
   - name: create db for vpn
-    mysql_db: name=vpns login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
+    mysql_db: name=e3c_vpns login_host={{ vip }} login_user=root login_password={{ mysql_root_password }} state=present
 
   - name: init database for vpn
-    shell: python /opt/vpns/models.py
+    shell: python /opt/e3c-vpns/models.py
 
   - include: vpn_pcs_restart.yml
-    when: ha_enabled == True
+    when: neutron_ha_enabled == True
 
   - include: vpn_service_restart.yml
-    when: ha_enabled == False
+    when: neutron_ha_enabled == False
 
   run_once: true
-  delegate_to: "{{ master_node }}"
   when: 'action_type == "install"'
 

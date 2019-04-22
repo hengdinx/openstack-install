@@ -17,17 +17,27 @@
     - keystone
     - nova/controller
     - glance
-    - neutron/controller
+    - mistral
     - cinder
     - consul
-    - quota
     - zabbix/controller
     - cmp/controller
     - lbs
     - docker
-    - vpn
     - ceph/controller
     - version
+  vars_files:
+    - default.yml
+    - keys.yml
+
+- hosts: neutron
+  gather_facts: False
+  roles:
+    - system_controller
+    - neutron/controller
+    - zabbix/compute
+    - docker
+    - vpn
   vars_files:
     - default.yml
     - keys.yml
@@ -51,5 +61,6 @@
   gather_facts: False
   roles:
     - zabbix_init
+    - quota
   vars_files:
     - default.yml

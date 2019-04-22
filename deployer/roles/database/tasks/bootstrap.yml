@@ -1,0 +1,23 @@
+
+- name: init database on first node
+  command: mysql_install_db
+  run_once: true
+  delegate_to: "{{ master_node }}"
+
+- name: bootstrap mysql cluster on first node
+  command: galera_new_cluster
+  run_once: true
+  delegate_to: "{{ master_node }}"
+
+- name: enable mysql with service command
+  service: name=mariadb enabled=true
+  when: hostname == master_node
+  
+- name: stop mysql service on other nodes
+  service: name=mariadb state=stopped
+  when: hostname != master_node
+
+- name: start mysql with service command
+  service: name=mariadb state=started enabled=true
+  when: hostname != master_node
+

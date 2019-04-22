@@ -9,7 +9,7 @@ from mylog import Logger
 from send_json import send_json
 import process_bar
 
-LOG_FILE = "/var/log/install.log"
+LOG_FILE = "/var/log/openstack-install.log"
 dataBuffer = bytes()
 headerSize = 12
 ANSIBLE_PATH = os.path.dirname(__file__)+"/../deployer"
@@ -18,31 +18,31 @@ class Ansible_runner(object):
     def __init__(self, inventory_file, action_type, sock):
         self.inventory_file = inventory_file
         self.sock = sock
-        self.logger = Logger('/var/log/install.log')
-        if action_type == "init":
-            self.playbook = ANSIBLE_PATH+"/init.yml"
+        self.logger = Logger('/var/log/openstack-install.log')
+        if action_type in ["init", "reinstall_init"]:
+            self.playbook = ANSIBLE_PATH+"/"+action_type+".yml"
             self.process_all = iter(process_bar.init_process_bar)
             self.process_step = 0
         if action_type == "install":
             self.playbook = ANSIBLE_PATH+"/install.yml"
             self.process_all = iter(process_bar.install_process_bar)
-            self.process_step = 3
+            self.process_step = 99.9/len(process_bar.install_process_bar)
         if action_type == "install_aio":
             self.playbook = ANSIBLE_PATH+"/install_aio.yml"
             self.process_all = iter(process_bar.install_aio_process_bar)
-            self.process_step = 3.4
+            self.process_step = 99.9/len(process_bar.install_aio_process_bar)
         if action_type == "add_compute":
             self.playbook = ANSIBLE_PATH+"/add_compute.yml"
             self.process_all = iter(process_bar.add_compute_process_bar)
-            self.process_step = 6.66
+            self.process_step = 99.9/len(process_bar.add_compute_process_bar)
         if action_type == "recover_controller":
             self.playbook = ANSIBLE_PATH+"/recover_controller.yml"
             self.process_all = iter(process_bar.recover_controller_process_bar)
-            self.process_step = 2.77
+            self.process_step = 99.9/len(process_bar.recover_controller_process_bar)
                 
 
     def run(self):
-        run_cmd = "ansible-playbook -i "+self.inventory_file+" "+self.playbook
+        run_cmd = "ansible-playbook -i "+self.inventory_file+" "+self.playbook+" --vault-password-file /opt/openstack-install/deployer/.vault_pass"
         p = subprocess.Popen(run_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
         cur_process = 0.0

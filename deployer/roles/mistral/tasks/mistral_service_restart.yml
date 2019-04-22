@@ -1,0 +1,8 @@
+---
+
+- name: restart mistral services
+  service: name={{ item }} state=restarted enabled=yes
+  with_items:
+    - openstack-mistral-api
+    - openstack-mistral-engine
+    - openstack-mistral-executor

@@ -6,7 +6,6 @@
     - Tserver
     - otc-ip
     - html5mmr-ws-server
-    - vdibroker
 
 - name: stop zero_evacuate service
   service: name=zero_evacuate state=stopped enabled=no

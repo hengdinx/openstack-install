@@ -4,6 +4,9 @@
 {% if deploy_ip_mg not in controller_mg_ip_list and deploy_ip_mg not in compute_mg_ip_list %}
 {{ deploy_ip_mg }} {{ deploy_hostname }}
 {% endif %}
+{% if "osd" in my_role %}
+{{ deploy_ip_sto }} {{ deploy_hostname }}
+{% endif %}
 {% for i in controllers %}
 {% if i['mg_ip'] != deploy_ip_mg %}
 {{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
@@ -15,6 +18,11 @@
 {% endif %}
 {% endfor %}
 {% for i in computes %}
+{% if i['hostname'] not in controller_hostname_list %}
+{{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
+{% endif %}
+{% endfor %}
+{% for i in neutrons %}
 {% if i['hostname'] not in controller_hostname_list %}
 {{ i['cluster_ip'] }} {{ i['hostname'] }}.{{ i['domain'] }} {{ i['hostname'] }}
 {% endif %}
