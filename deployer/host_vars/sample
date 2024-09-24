@@ -1,3 +1,4 @@
+# file name should be the hostname
 ##############################################################################
 ntp_server:             "cn.ntp.org.cn"
 hostname:               "controller1"
